@@ -1,113 +1,139 @@
 <!DOCTYPE html>
-<html lang="en">
+<html>
   <head>
-    <meta charset="UTF-8" />
-    <title>PeerJS Video Call</title>
+    <title>Voice Call with PeerJS</title>
     <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
     <style>
       body {
-        font-family: Arial;
-        display: flex;
-        flex-direction: column;
-        align-items: center;
+        font-family: sans-serif;
+        max-width: 400px;
+        margin: auto;
         padding: 20px;
+        background: #f0f0f0;
+      }
+      h2 {
+        text-align: center;
       }
       input,
       button {
-        margin: 8px;
-        padding: 8px;
-        font-size: 16px;
+        width: 100%;
+        padding: 10px;
+        margin: 5px 0;
       }
-      video {
-        width: 45%;
-        margin: 10px;
-        border: 2px solid black;
+      .call-controls,
+      .incoming-call {
+        display: none;
+        margin-top: 15px;
       }
-      .videos {
-        display: flex;
-        flex-wrap: wrap;
-        justify-content: center;
+      .status {
+        margin-top: 10px;
+        text-align: center;
+        font-weight: bold;
+        color: green;
       }
     </style>
   </head>
   <body>
-    <h2>PeerJS Video Call (Mobile ↔ PC)</h2>
-    <p><b>Your ID:</b> <span id="my-id">Loading...</span></p>
-    <input id="peer-id" placeholder="Enter peer ID" />
-    <button id="call-btn">Start Call</button>
-    <div class="videos">
-      <video id="local-video" autoplay muted></video>
-      <video id="remote-video" autoplay></video>
+    <h2>📞 PeerJS Voice Call</h2>
+
+    <p><strong>Your ID:</strong> <span id="yourId">Loading...</span></p>
+
+    <input type="text" id="peerIdInput" placeholder="Enter Peer ID to call" />
+    <button id="callBtn">Start Call</button>
+
+    <div class="incoming-call" id="incomingCall">
+      <p><strong>Incoming call...</strong></p>
+      <button id="acceptBtn">Accept</button>
+      <button id="declineBtn">Decline</button>
     </div>
 
+    <div class="call-controls" id="callControls">
+      <p><strong>In Call with:</strong> <span id="connectedWith"></span></p>
+      <button id="endCallBtn">End Call</button>
+    </div>
+
+    <p class="status" id="status"></p>
+
     <script>
-      const myIdSpan = document.getElementById("my-id");
-      const callBtn = document.getElementById("call-btn");
-      const peerIdInput = document.getElementById("peer-id");
-      const localVideo = document.getElementById("local-video");
-      const remoteVideo = document.getElementById("remote-video");
+      const yourIdSpan = document.getElementById("yourId");
+      const peerIdInput = document.getElementById("peerIdInput");
+      const callBtn = document.getElementById("callBtn");
+      const incomingCallDiv = document.getElementById("incomingCall");
+      const acceptBtn = document.getElementById("acceptBtn");
+      const declineBtn = document.getElementById("declineBtn");
+      const callControls = document.getElementById("callControls");
+      const endCallBtn = document.getElementById("endCallBtn");
+      const connectedWithSpan = document.getElementById("connectedWith");
+      const status = document.getElementById("status");
 
-      let localStream;
-
-      // Create a peer with a fixed ID (shorter)
-      const myId = "user-" + Math.random().toString(36).substring(2, 6);
-      const peer = new Peer(myId, {
-        host: "0.peerjs.com", // Public PeerServer
-        port: 443,
-        path: "/",
-        secure: true,
-        config: {
-          iceServers: [
-            { urls: "stun:stun.l.google.com:19302" }, // Public STUN
-            {
-              urls: "turn:openrelay.metered.ca:80",
-              username: "openrelayproject",
-              credential: "openrelayproject",
-            },
-          ],
-        },
+      const peer = new Peer({
+        config: { iceServers: [{ url: "stun:stun.l.google.com:19302" }] },
       });
+
+      let currentCall = null;
 
       peer.on("open", (id) => {
-        myIdSpan.textContent = id;
-        console.log("Connected with ID:", id);
+        yourIdSpan.textContent = id;
       });
 
-      peer.on("error", (err) => {
-        alert("Peer error: " + err);
-        console.error(err);
-      });
+      peer.on("call", (call) => {
+        currentCall = call;
+        incomingCallDiv.style.display = "block";
 
-      navigator.mediaDevices
-        .getUserMedia({ video: true, audio: true })
-        .then((stream) => {
-          localStream = stream;
-          localVideo.srcObject = stream;
-        })
-        .catch((err) => {
-          alert("Error accessing camera/mic: " + err.message);
-        });
+        acceptBtn.onclick = () => {
+          navigator.mediaDevices
+            .getUserMedia({ audio: true })
+            .then((stream) => {
+              call.answer(stream);
+              handleCallStream(call, stream);
+            });
+          incomingCallDiv.style.display = "none";
+        };
+
+        declineBtn.onclick = () => {
+          call.close();
+          currentCall = null;
+          incomingCallDiv.style.display = "none";
+        };
+      });
 
       callBtn.onclick = () => {
-        const otherId = peerIdInput.value.trim();
-        if (!otherId || !localStream) return alert("Enter a valid ID");
+        const otherId = peerIdInput.value;
+        if (!otherId) return alert("Enter a Peer ID!");
 
-        const call = peer.call(otherId, localStream);
-        call.on("stream", (remoteStream) => {
-          remoteVideo.srcObject = remoteStream;
-        });
-
-        call.on("close", () => {
-          alert("Call ended.");
+        navigator.mediaDevices.getUserMedia({ audio: true }).then((stream) => {
+          const call = peer.call(otherId, stream);
+          currentCall = call;
+          handleCallStream(call, stream);
         });
       };
 
-      peer.on("call", (call) => {
-        call.answer(localStream);
+      endCallBtn.onclick = () => {
+        if (currentCall) {
+          currentCall.close();
+          currentCall = null;
+          callControls.style.display = "none";
+          status.textContent = "Call ended.";
+        }
+      };
+
+      function handleCallStream(call, localStream) {
+        status.textContent = "In call...";
+        connectedWithSpan.textContent = call.peer;
+        callControls.style.display = "block";
+
         call.on("stream", (remoteStream) => {
-          remoteVideo.srcObject = remoteStream;
+          const audio = new Audio();
+          audio.srcObject = remoteStream;
+          audio.play();
         });
-      });
+
+        call.on("close", () => {
+          callControls.style.display = "none";
+          status.textContent = "Call ended.";
+          currentCall = null;
+        });
+      }
     </script>
   </body>
 </html>
