@@ -1,3 +1,4 @@
+<!-- FULL HTML CODE (same as yours, with fixed call behavior) -->
 <!DOCTYPE html>
 <html lang="en">
   <head>
@@ -6,7 +7,7 @@
     <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <style>
-      /* [Styles unchanged from your latest version with small updates] */
+      /* [Same styles, unchanged] */
       * {
         margin: 0;
         padding: 0;
@@ -18,7 +19,6 @@
         height: 100%;
         background: #f0f0f0;
       }
-
       .app {
         display: flex;
         flex-direction: column;
@@ -29,7 +29,6 @@
         border-radius: 10px;
         overflow: hidden;
       }
-
       .screen {
         flex: 1;
         display: none;
@@ -38,13 +37,11 @@
       .screen.active {
         display: block;
       }
-
       .tab-bar {
         display: flex;
         border-top: 1px solid #ccc;
         background: #fff;
       }
-
       .tab-bar button {
         flex: 1;
         padding: 15px;
@@ -53,29 +50,24 @@
         background: none;
         cursor: pointer;
       }
-
       .tab-bar button.active {
         background: #e0e0e0;
       }
-
       .input-group {
         margin: 15px 0;
         display: flex;
         flex-wrap: wrap;
         gap: 10px;
       }
-
       .input-group input,
       .input-group button {
         padding: 10px;
         font-size: 16px;
         flex: 1 1 100%;
       }
-
       .contact-list {
         margin-top: 10px;
       }
-
       .contact-item {
         display: flex;
         align-items: center;
@@ -85,21 +77,17 @@
         margin-bottom: 5px;
         padding: 8px;
       }
-
       .contact-item input[type="checkbox"] {
         margin-right: 10px;
         display: none;
       }
-
       .contact-item.show-checkbox input[type="checkbox"] {
         display: inline-block;
       }
-
       .status {
         margin-top: 10px;
         color: green;
       }
-
       .call-buttons {
         display: flex;
         justify-content: space-around;
@@ -107,19 +95,16 @@
         flex-wrap: wrap;
         gap: 10px;
       }
-
       .call-buttons button {
         flex: 1 1 45%;
         padding: 10px;
         font-size: 16px;
       }
-
       .my-id {
         font-size: 14px;
         color: #555;
         margin-top: 10px;
       }
-
       .delete-btn,
       .select-btn {
         width: 100%;
@@ -133,15 +118,12 @@
         cursor: pointer;
         display: none;
       }
-
       .select-btn {
         background: #2980b9;
       }
-
       audio {
         display: none;
       }
-
       @media (max-width: 480px) {
         .app {
           border: none;
@@ -212,8 +194,11 @@
     <audio id="remoteAudio" autoplay></audio>
 
     <script>
-      const localId = "user" + Math.floor(1000 + Math.random() * 9000);
-      localStorage.setItem("fixedPeerId", localId);
+      let localId = localStorage.getItem("fixedPeerId");
+      if (!localId) {
+        localId = "user" + Math.floor(1000 + Math.random() * 9000);
+        localStorage.setItem("fixedPeerId", localId);
+      }
 
       let peer = new Peer(localId);
       let currentCall = null;
@@ -238,6 +223,14 @@
         callStatus.textContent = "Incoming call from: " + call.peer;
         incomingCallControls.style.display = "flex";
         currentCall = call;
+
+        // In case caller closes before answering
+        call.on("close", () => {
+          callStatus.textContent = "Call Ended";
+          incomingCallControls.style.display = "none";
+          inCallControls.style.display = "none";
+          currentCall = null;
+        });
       });
 
       function startCall() {
@@ -258,16 +251,19 @@
 
           call.on("stream", (remoteStream) => {
             remoteAudio.srcObject = remoteStream;
+            callStatus.textContent = "Call Connected";
           });
 
           call.on("close", () => {
             callStatus.textContent = "Call Ended";
             inCallControls.style.display = "none";
+            currentCall = null;
           });
 
-          call.on("error", () => {
+          call.on("error", (err) => {
             callStatus.textContent = "Call Failed or Rejected";
             inCallControls.style.display = "none";
+            currentCall = null;
           });
         });
       }
@@ -281,30 +277,32 @@
 
           currentCall.on("stream", (remoteStream) => {
             remoteAudio.srcObject = remoteStream;
+            callStatus.textContent = "Call Connected";
           });
 
           currentCall.on("close", () => {
             callStatus.textContent = "Call Ended";
             inCallControls.style.display = "none";
+            currentCall = null;
           });
         });
       }
 
       function denyCall() {
         if (currentCall) {
-          currentCall.close(); // Triggers error/close on caller
-          currentCall = null;
+          currentCall.close();
           callStatus.textContent = "Call Rejected";
           incomingCallControls.style.display = "none";
+          currentCall = null;
         }
       }
 
       function endCall() {
         if (currentCall) {
           currentCall.close();
-          currentCall = null;
           callStatus.textContent = "Call Ended";
           inCallControls.style.display = "none";
+          currentCall = null;
         }
       }
 
@@ -352,8 +350,7 @@
       function toggleCheckboxes() {
         selecting = !selecting;
         document.querySelectorAll(".contact-item").forEach((item) => {
-          if (selecting) item.classList.add("show-checkbox");
-          else item.classList.remove("show-checkbox");
+          item.classList.toggle("show-checkbox", selecting);
         });
         updateDeleteVisibility();
       }
