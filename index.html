@@ -2,244 +2,157 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Audio Call System</title>
+    <title>Audio Call with PeerJS</title>
+    <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/qrcode@1.5.1/build/qrcode.min.js"></script>
     <style>
       body {
-        font-family: Arial, sans-serif;
-        background: #f0f2f5;
-        padding: 20px;
-        color: #333;
-      }
-
-      .container {
-        max-width: 400px;
+        font-family: sans-serif;
+        max-width: 500px;
         margin: auto;
-        background: white;
         padding: 20px;
-        border-radius: 12px;
-        box-shadow: 0 0 10px #ccc;
       }
-
-      input {
-        width: 100%;
-        padding: 8px;
-        margin-top: 10px;
-        margin-bottom: 10px;
-      }
-
+      input,
       button {
-        padding: 10px;
-        background: #007bff;
-        color: white;
-        border: none;
-        cursor: pointer;
-        margin-top: 5px;
+        margin: 6px 0;
+        padding: 8px;
+        width: 100%;
       }
-
-      button:hover {
-        background: #0056b3;
+      #users div {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        border: 1px solid #ddd;
+        padding: 5px;
+        margin: 5px 0;
       }
-
-      #users button {
-        margin-right: 5px;
-        margin-top: 5px;
+      #callStatus {
+        margin-top: 10px;
+        font-weight: bold;
       }
-
-      .qr {
-        text-align: center;
-        margin-bottom: 10px;
-      }
-
-      #incoming-call {
-        display: none;
-        background: #fffbcc;
-        border: 1px solid #999;
-        padding: 15px;
+      #qrCanvas {
         margin-top: 10px;
         text-align: center;
-        border-radius: 10px;
-      }
-
-      #incoming-call button {
-        background: #28a745;
-        margin-right: 10px;
-      }
-
-      #incoming-call .decline {
-        background: #dc3545;
       }
     </style>
   </head>
   <body>
-    <div class="container">
-      <h2>🎧 Audio Call</h2>
-      <p>Your ID: <span id="my-id">Loading...</span></p>
+    <h2>🔊 PeerJS Audio Call</h2>
+    <p>Your ID: <b id="myId"></b></p>
+    <div id="qrCanvas"></div>
 
-      <div class="qr">
-        <canvas id="qrCanvas"></canvas>
-        <p><button onclick="copyID()">📋 Copy ID</button></p>
-      </div>
+    <input id="newUserId" placeholder="Enter user ID to add" />
+    <button onclick="addUser()">➕ Add User</button>
 
-      <input type="text" id="peer-id" placeholder="Enter Peer ID" />
-      <button onclick="addUser()">➕ Add User</button>
-      <div id="users"></div>
+    <div id="users"></div>
 
-      <div id="incoming-call">
-        <p>
-          <strong>📞 Incoming call from <span id="caller-id"></span></strong>
-        </p>
-        <button onclick="acceptCall()">✅ Accept</button>
-        <button class="decline" onclick="declineCall()">❌ Decline</button>
-      </div>
+    <div id="callStatus"></div>
 
-      <hr />
-      <audio id="remote-audio" autoplay></audio>
-    </div>
-
-    <!-- PeerJS -->
-    <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
-    <!-- QR Code Generator -->
-    <script src="https://cdn.jsdelivr.net/npm/qrious/dist/qrious.min.js"></script>
+    <audio id="remoteAudio" autoplay></audio>
 
     <script>
-      let myID = localStorage.getItem("fixedID");
-      if (!myID) {
-        myID = "user_" + Math.random().toString(36).substring(2, 8);
-        localStorage.setItem("fixedID", myID);
-      }
+      let myId =
+        localStorage.getItem("fixedPeerId") ||
+        "user-" + Math.random().toString(36).substr(2, 6);
+      localStorage.setItem("fixedPeerId", myId);
+      document.getElementById("myId").textContent = myId;
 
-      const peer = new Peer(myID, {
-        debug: 2, // For logs
-        config: {
-          iceServers: [{ urls: "stun:stun.l.google.com:19302" }],
-        },
+      // QR
+      QRCode.toCanvas(
+        document.createElement("canvas"),
+        myId,
+        function (error, canvas) {
+          if (!error) document.getElementById("qrCanvas").appendChild(canvas);
+        }
+      );
+
+      const peer = new Peer(myId, {
+        host: "peerjs.com",
+        secure: true,
+        port: 443,
       });
 
-      const remoteAudio = document.getElementById("remote-audio");
-      const myIdSpan = document.getElementById("my-id");
-      const usersDiv = document.getElementById("users");
-      const peerIdInput = document.getElementById("peer-id");
-      const incomingDiv = document.getElementById("incoming-call");
-      const callerSpan = document.getElementById("caller-id");
+      const remoteAudio = document.getElementById("remoteAudio");
+      const callStatus = document.getElementById("callStatus");
 
-      let currentCall = null;
-      let savedStream = null;
-      let incomingCall = null;
-
-      peer.on("open", (id) => {
-        console.log("Connected as:", id);
-        myIdSpan.textContent = id;
-        generateQR(id);
-        loadUsers();
-      });
-
-      peer.on("error", (err) => {
-        alert("PeerJS Error: " + err);
-        console.error(err);
+      let localStream;
+      navigator.mediaDevices.getUserMedia({ audio: true }).then((stream) => {
+        localStream = stream;
       });
 
       peer.on("call", (call) => {
-        console.log("Incoming call from", call.peer);
-        incomingCall = call;
-        callerSpan.textContent = call.peer;
-        incomingDiv.style.display = "block";
-      });
+        const accept = confirm("Incoming call from " + call.peer + ". Accept?");
+        if (accept) {
+          call.answer(localStream);
+          callStatus.innerText = "✅ Call answered from " + call.peer;
 
-      function acceptCall() {
-        navigator.mediaDevices.getUserMedia({ audio: true }).then((stream) => {
-          savedStream = stream;
-          incomingCall.answer(stream);
-          incomingCall.on("stream", (remoteStream) => {
+          call.on("stream", (remoteStream) => {
             remoteAudio.srcObject = remoteStream;
           });
-          incomingDiv.style.display = "none";
-        });
-      }
 
-      function declineCall() {
-        if (incomingCall) {
-          incomingCall.close();
-        }
-        incomingDiv.style.display = "none";
-      }
-
-      function callUser(id) {
-        navigator.mediaDevices
-          .getUserMedia({ audio: true })
-          .then((stream) => {
-            savedStream = stream;
-            const call = peer.call(id, stream);
-            currentCall = call;
-            call.on("stream", (remoteStream) => {
-              remoteAudio.srcObject = remoteStream;
-            });
-
-            call.on("close", () => {
-              alert("Call ended");
-            });
-
-            call.on("error", (err) => {
-              alert("Call failed: " + err);
-              console.error(err);
-            });
-          })
-          .catch((err) => {
-            alert("Microphone permission denied");
-            console.error(err);
+          call.on("close", () => {
+            callStatus.innerText = "❌ Call ended";
           });
-      }
+        } else {
+          call.close();
+        }
+      });
 
       function addUser() {
-        const id = peerIdInput.value.trim();
-        if (!id) return;
-
-        let users = JSON.parse(localStorage.getItem("userList") || "[]");
-        if (!users.includes(id) && id !== myID) {
-          users.push(id);
-          localStorage.setItem("userList", JSON.stringify(users));
-          loadUsers();
+        const id = document.getElementById("newUserId").value.trim();
+        if (!id) return alert("Enter a user ID");
+        let saved = JSON.parse(localStorage.getItem("savedUsers") || "[]");
+        if (!saved.includes(id)) {
+          saved.push(id);
+          localStorage.setItem("savedUsers", JSON.stringify(saved));
+          renderUsers();
         }
-        peerIdInput.value = "";
+        document.getElementById("newUserId").value = "";
       }
 
-      function loadUsers() {
+      function renderUsers() {
+        const usersDiv = document.getElementById("users");
         usersDiv.innerHTML = "";
-        let users = JSON.parse(localStorage.getItem("userList") || "[]");
+        let saved = JSON.parse(localStorage.getItem("savedUsers") || "[]");
 
-        users.forEach((id) => {
-          const btn = document.createElement("button");
-          btn.textContent = `📞 Call ${id}`;
-          btn.onclick = () => callUser(id);
-
-          const del = document.createElement("button");
-          del.textContent = "❌";
-          del.onclick = () => removeUser(id);
-
-          usersDiv.appendChild(btn);
-          usersDiv.appendChild(del);
+        saved.forEach((id) => {
+          const div = document.createElement("div");
+          div.innerHTML = `
+          <span>${id}</span>
+          <button onclick="callUser('${id}')">📞 Call</button>
+          <button onclick="removeUser('${id}')">❌</button>
+        `;
+          usersDiv.appendChild(div);
         });
       }
 
       function removeUser(id) {
-        let users = JSON.parse(localStorage.getItem("userList") || "[]");
-        users = users.filter((u) => u !== id);
-        localStorage.setItem("userList", JSON.stringify(users));
-        loadUsers();
+        let saved = JSON.parse(localStorage.getItem("savedUsers") || "[]");
+        saved = saved.filter((x) => x !== id);
+        localStorage.setItem("savedUsers", JSON.stringify(saved));
+        renderUsers();
       }
 
-      function generateQR(id) {
-        const qr = new QRious({
-          element: document.getElementById("qrCanvas"),
-          value: id,
-          size: 150,
+      function callUser(userId) {
+        if (!localStream) return alert("Microphone not ready");
+        callStatus.innerText = "📞 Calling " + userId + "...";
+
+        const call = peer.call(userId, localStream);
+        call.on("stream", (remoteStream) => {
+          remoteAudio.srcObject = remoteStream;
+          callStatus.innerText = "✅ Call connected with " + userId;
+        });
+
+        call.on("close", () => {
+          callStatus.innerText = "❌ Call ended";
+        });
+
+        call.on("error", (err) => {
+          callStatus.innerText = "⚠️ Call failed: " + err.message;
         });
       }
 
-      function copyID() {
-        navigator.clipboard.writeText(myID);
-        alert("Copied your ID!");
-      }
+      renderUsers();
     </script>
   </body>
 </html>
