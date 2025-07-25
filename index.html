@@ -6,85 +6,130 @@
     <style>
       body {
         font-family: Arial;
-        padding: 20px;
-        background: #f5f5f5;
         text-align: center;
+        background: #f0f0f0;
+        padding: 40px;
       }
       input,
       button {
         padding: 10px;
         margin: 5px;
+        width: 250px;
+        font-size: 16px;
       }
       audio {
         margin-top: 20px;
       }
+      h2 {
+        color: #333;
+      }
     </style>
   </head>
   <body>
-    <h2>🔊 PeerJS Audio Call</h2>
-    <p>Your ID: <span id="my-id"></span></p>
-    <input type="text" id="peer-id" placeholder="Enter peer ID to call" />
-    <button onclick="startCall()">Call</button>
-    <button onclick="endCall()">End Call</button>
+    <h2>🎤 PeerJS Audio Call</h2>
 
-    <h3>Status: <span id="status">Idle</span></h3>
-    <audio id="remoteAudio" autoplay></audio>
+    <p><strong>Your ID:</strong> <span id="my-id">Loading...</span></p>
+
+    <input type="text" id="peer-id" placeholder="Enter peer ID to call" />
+    <br />
+    <button onclick="startCall()">📞 Call</button>
+    <button onclick="endCall()">❌ End Call</button>
+
+    <p>Status: <span id="status">Waiting...</span></p>
+
+    <audio id="remoteAudio" autoplay controls></audio>
 
     <script>
-      let peerId = localStorage.getItem("fixed-peer-id");
-      if (!peerId) {
-        peerId = "user-" + Math.random().toString(36).substring(2, 6);
-        localStorage.setItem("fixed-peer-id", peerId);
-      }
-
-      const peer = new Peer(peerId);
+      let localStream = null;
       let currentCall = null;
 
-      peer.on("open", (id) => {
-        document.getElementById("my-id").textContent = id;
-      });
-
-      peer.on("call", (call) => {
-        document.getElementById("status").textContent = "Incoming Call...";
-        navigator.mediaDevices.getUserMedia({ audio: true }).then((stream) => {
-          call.answer(stream);
-          document.getElementById("status").textContent = "Call Answered";
-          call.on("stream", (remoteStream) => {
-            document.getElementById("remoteAudio").srcObject = remoteStream;
-          });
-          call.on("close", () => {
-            document.getElementById("status").textContent = "Call Ended";
-            document.getElementById("remoteAudio").srcObject = null;
-          });
-          currentCall = call;
-        });
-      });
-
-      function startCall() {
-        const otherId = document.getElementById("peer-id").value;
-        if (!otherId) return alert("Enter a peer ID!");
-        navigator.mediaDevices.getUserMedia({ audio: true }).then((stream) => {
-          const call = peer.call(otherId, stream);
-          document.getElementById("status").textContent = "Calling...";
-          call.on("stream", (remoteStream) => {
-            document.getElementById("remoteAudio").srcObject = remoteStream;
-            document.getElementById("status").textContent = "In Call";
-          });
-          call.on("close", () => {
-            document.getElementById("status").textContent = "Call Ended";
-            document.getElementById("remoteAudio").srcObject = null;
-          });
-          currentCall = call;
-        });
+      // Generate fixed ID
+      let myId = localStorage.getItem("peer-fixed-id");
+      if (!myId) {
+        myId = "user-" + Math.random().toString(36).substring(2, 6);
+        localStorage.setItem("peer-fixed-id", myId);
       }
 
+      // Create peer
+      const peer = new Peer(myId, {
+        debug: 1,
+      });
+
+      // Display own ID
+      peer.on("open", (id) => {
+        document.getElementById("my-id").innerText = id;
+      });
+
+      // Incoming call handler
+      peer.on("call", (call) => {
+        updateStatus("Incoming call...");
+        navigator.mediaDevices
+          .getUserMedia({ audio: true })
+          .then((stream) => {
+            localStream = stream;
+            call.answer(stream);
+            currentCall = call;
+            setupCallEvents(call);
+          })
+          .catch((err) => {
+            console.error("Mic access denied:", err);
+            updateStatus("Microphone permission denied");
+          });
+      });
+
+      // Call setup
+      function startCall() {
+        const peerId = document.getElementById("peer-id").value;
+        if (!peerId) {
+          alert("Please enter a peer ID to call.");
+          return;
+        }
+        navigator.mediaDevices
+          .getUserMedia({ audio: true })
+          .then((stream) => {
+            localStream = stream;
+            const call = peer.call(peerId, stream);
+            currentCall = call;
+            updateStatus("Calling...");
+            setupCallEvents(call);
+          })
+          .catch((err) => {
+            console.error("Mic access denied:", err);
+            updateStatus("Microphone permission denied");
+          });
+      }
+
+      // End the call
       function endCall() {
         if (currentCall) {
           currentCall.close();
-          currentCall = null;
-          document.getElementById("status").textContent = "Call Ended";
-          document.getElementById("remoteAudio").srcObject = null;
+          updateStatus("Call ended");
         }
+        if (localStream) {
+          localStream.getTracks().forEach((track) => track.stop());
+        }
+        document.getElementById("remoteAudio").srcObject = null;
+      }
+
+      // Handle remote stream
+      function setupCallEvents(call) {
+        call.on("stream", (remoteStream) => {
+          const audio = document.getElementById("remoteAudio");
+          audio.srcObject = remoteStream;
+          audio.play().catch((err) => {
+            console.error("Audio play failed:", err);
+          });
+          updateStatus("In Call");
+        });
+
+        call.on("close", () => {
+          updateStatus("Call ended");
+          document.getElementById("remoteAudio").srcObject = null;
+        });
+      }
+
+      function updateStatus(text) {
+        document.getElementById("status").innerText = text;
       }
     </script>
   </body>
