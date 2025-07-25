@@ -3,7 +3,7 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Audio Call System</title>
+    <title>Audio Call</title>
     <style>
       body {
         font-family: Arial, sans-serif;
@@ -50,6 +50,25 @@
         text-align: center;
         margin-bottom: 10px;
       }
+
+      #incoming-call {
+        display: none;
+        background: #fffbcc;
+        border: 1px solid #999;
+        padding: 15px;
+        margin-top: 10px;
+        text-align: center;
+        border-radius: 10px;
+      }
+
+      #incoming-call button {
+        background: #28a745;
+        margin-right: 10px;
+      }
+
+      #incoming-call .decline {
+        background: #dc3545;
+      }
     </style>
   </head>
   <body>
@@ -62,9 +81,17 @@
         <p><button onclick="copyID()">📋 Copy ID</button></p>
       </div>
 
-      <input type="text" id="peer-id" placeholder="Enter Peer ID or scan QR" />
+      <input type="text" id="peer-id" placeholder="Enter Peer ID" />
       <button onclick="addUser()">➕ Add User</button>
       <div id="users"></div>
+
+      <div id="incoming-call">
+        <p>
+          <strong>📞 Incoming call from <span id="caller-id"></span></strong>
+        </p>
+        <button onclick="acceptCall()">✅ Accept</button>
+        <button class="decline" onclick="declineCall()">❌ Decline</button>
+      </div>
 
       <hr />
       <audio id="remote-audio" autoplay></audio>
@@ -76,7 +103,6 @@
     <script src="https://cdn.jsdelivr.net/npm/qrious/dist/qrious.min.js"></script>
 
     <script>
-      // Generate or retrieve persistent ID
       let myID = localStorage.getItem("fixedID");
       if (!myID) {
         myID = "user_" + Math.random().toString(36).substring(2, 8);
@@ -88,6 +114,12 @@
       const myIdSpan = document.getElementById("my-id");
       const usersDiv = document.getElementById("users");
       const peerIdInput = document.getElementById("peer-id");
+      const incomingDiv = document.getElementById("incoming-call");
+      const callerSpan = document.getElementById("caller-id");
+
+      let currentCall = null;
+      let savedStream = null;
+      let incomingCall = null;
 
       peer.on("open", (id) => {
         myIdSpan.textContent = id;
@@ -96,17 +128,34 @@
       });
 
       peer.on("call", (call) => {
+        incomingCall = call;
+        callerSpan.textContent = call.peer;
+        incomingDiv.style.display = "block";
+      });
+
+      function acceptCall() {
         navigator.mediaDevices.getUserMedia({ audio: true }).then((stream) => {
-          call.answer(stream);
-          call.on("stream", (remoteStream) => {
+          savedStream = stream;
+          incomingCall.answer(stream);
+          incomingCall.on("stream", (remoteStream) => {
             remoteAudio.srcObject = remoteStream;
           });
+          incomingDiv.style.display = "none";
         });
-      });
+      }
+
+      function declineCall() {
+        if (incomingCall) {
+          incomingCall.close();
+        }
+        incomingDiv.style.display = "none";
+      }
 
       function callUser(id) {
         navigator.mediaDevices.getUserMedia({ audio: true }).then((stream) => {
+          savedStream = stream;
           const call = peer.call(id, stream);
+          currentCall = call;
           call.on("stream", (remoteStream) => {
             remoteAudio.srcObject = remoteStream;
           });
