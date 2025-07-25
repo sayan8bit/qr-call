@@ -1,333 +1,305 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
   <head>
-    <title>PeerJS Voice Call App</title>
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta charset="UTF-8" />
+    <title>Voice Call App</title>
     <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
     <style>
-      body {
+      * {
         margin: 0;
-        font-family: "Segoe UI", sans-serif;
-        background: #121212;
-        color: #fff;
+        padding: 0;
+        font-family: Arial, sans-serif;
+        box-sizing: border-box;
       }
 
-      .container {
-        max-width: 400px;
-        margin: auto;
-        height: 100vh;
+      body,
+      html {
+        height: 100%;
+        background: #f4f4f4;
+      }
+
+      .app {
         display: flex;
         flex-direction: column;
+        height: 100%;
+        max-width: 400px;
+        margin: auto;
+        border: 1px solid #ccc;
+        border-radius: 10px;
+        overflow: hidden;
       }
 
-      header {
-        padding: 15px;
-        text-align: center;
-        background: #1f1f1f;
-        font-size: 20px;
-        font-weight: bold;
-      }
-
-      nav {
-        display: flex;
-        background: #1f1f1f;
-      }
-
-      nav button {
+      .screen {
         flex: 1;
-        padding: 12px;
-        background: #1f1f1f;
-        color: #aaa;
-        border: none;
-        font-size: 16px;
-        cursor: pointer;
-        transition: 0.2s;
-      }
-
-      nav button.active {
-        background: #272727;
-        color: #fff;
-      }
-
-      .section {
         display: none;
-        padding: 15px;
-        flex: 1;
-        overflow-y: auto;
+        padding: 20px;
       }
 
-      .section.active {
+      .screen.active {
         display: block;
       }
 
-      input,
-      button {
-        width: 100%;
-        padding: 12px;
-        margin: 10px 0;
+      .tab-bar {
+        display: flex;
+        border-top: 1px solid #ccc;
+        background: #fff;
+      }
+
+      .tab-bar button {
+        flex: 1;
+        padding: 15px;
         font-size: 16px;
         border: none;
-        border-radius: 8px;
+        background: none;
+        cursor: pointer;
       }
 
-      input {
-        background: #2c2c2c;
-        color: white;
+      .tab-bar button.active {
+        background: #e0e0e0;
       }
 
-      button {
-        background: #03dac6;
-        color: black;
-        font-weight: bold;
-      }
-
-      .incoming-call,
-      .call-controls {
-        margin-top: 15px;
-      }
-
-      .saved-users div {
-        display: flex;
-        justify-content: space-between;
-        background: #2a2a2a;
-        margin: 5px 0;
+      .contact-list button {
+        display: block;
+        width: 100%;
         padding: 10px;
-        border-radius: 6px;
-      }
-
-      .saved-users button {
-        margin-left: 5px;
-        background: #03dac6;
-        color: black;
+        margin: 5px 0;
+        text-align: left;
+        background: #fff;
+        border: 1px solid #ccc;
         border-radius: 5px;
-        font-size: 14px;
-        padding: 5px 8px;
       }
 
       .status {
-        text-align: center;
         margin-top: 10px;
-        font-weight: bold;
-        color: #03dac6;
+        color: green;
       }
 
-      small {
-        display: block;
-        margin-bottom: 5px;
-        color: #aaa;
+      .input-group {
+        margin: 15px 0;
+      }
+
+      .input-group input,
+      .input-group button {
+        padding: 10px;
+        font-size: 16px;
+      }
+
+      .input-group input {
+        width: calc(100% - 110px);
+      }
+
+      .input-group button {
+        width: 100px;
+      }
+
+      .call-buttons {
+        display: flex;
+        justify-content: space-around;
+        margin-top: 20px;
+      }
+
+      .call-buttons button {
+        padding: 10px 20px;
+        font-size: 16px;
+      }
+
+      audio {
+        display: none;
+      }
+
+      .my-id {
+        font-size: 14px;
+        color: #555;
+        margin-top: 10px;
       }
     </style>
   </head>
   <body>
-    <div class="container">
-      <header>📞 Peer Voice Call</header>
-
-      <nav>
-        <button class="tab active" onclick="switchTab('callTab')">Call</button>
-        <button class="tab" onclick="switchTab('contactsTab')">Contacts</button>
-        <button class="tab" onclick="switchTab('settingsTab')">Settings</button>
-      </nav>
-
-      <!-- 📞 CALL TAB -->
-      <div class="section active" id="callTab">
-        <small>Your ID</small>
-        <input type="text" id="yourId" readonly />
-
-        <small>Enter Peer ID to call</small>
-        <input type="text" id="peerIdInput" placeholder="Peer ID" />
-        <button id="callBtn">Start Call</button>
-
-        <div class="incoming-call" id="incomingCall" style="display: none">
-          <p><strong>📞 Incoming call...</strong></p>
-          <button id="acceptBtn">Accept</button>
-          <button id="declineBtn">Decline</button>
+    <div class="app">
+      <!-- Call Tab -->
+      <div class="screen active" id="callTab">
+        <h2>Make a Call</h2>
+        <div class="input-group">
+          <input
+            type="text"
+            id="callIdInput"
+            placeholder="Enter ID or Contact Name"
+          />
+          <button onclick="startCall()">Call</button>
         </div>
-
-        <div class="call-controls" id="callControls" style="display: none">
-          <p>🟢 In Call with <span id="connectedWith"></span></p>
-          <button id="endCallBtn" style="background: #e74c3c; color: white">
-            End Call
-          </button>
+        <div id="callStatus" class="status"></div>
+        <div class="call-buttons" id="inCallControls" style="display: none">
+          <button onclick="endCall()">End Call</button>
         </div>
-
-        <p class="status" id="status"></p>
+        <div
+          class="call-buttons"
+          id="incomingCallControls"
+          style="display: none"
+        >
+          <button onclick="acceptCall()">Accept</button>
+          <button onclick="denyCall()">Deny</button>
+        </div>
       </div>
 
-      <!-- 📇 CONTACTS TAB -->
-      <div class="section" id="contactsTab">
-        <input type="text" id="nameInput" placeholder="Name" />
-        <input type="text" id="saveIdInput" placeholder="Peer ID" />
-        <button id="saveBtn">Save Contact</button>
-
-        <div class="saved-users" id="savedUsers"></div>
+      <!-- Contacts Tab -->
+      <div class="screen" id="contactsTab">
+        <h2>Contacts</h2>
+        <div class="input-group">
+          <input type="text" id="contactName" placeholder="Name" />
+          <input type="text" id="contactId" placeholder="ID" />
+          <button onclick="saveContact()">Save</button>
+        </div>
+        <div class="contact-list" id="contactList"></div>
       </div>
 
-      <!-- ⚙️ SETTINGS TAB -->
-      <div class="section" id="settingsTab">
-        <p><strong>Your Persistent ID:</strong></p>
-        <code id="yourFixedId"></code>
-        <p>This ID stays the same even after refresh.</p>
-        <button onclick="generateNewId()" style="background: #ff9800">
-          🔄 Generate New ID
+      <!-- Profile Tab -->
+      <div class="screen" id="profileTab">
+        <h2>Your Profile</h2>
+        <p class="my-id">Your ID: <b id="myPeerId">Loading...</b></p>
+      </div>
+
+      <!-- Bottom Tab Bar -->
+      <div class="tab-bar">
+        <button class="active" onclick="switchTab('callTab', this)">
+          Call
         </button>
+        <button onclick="switchTab('contactsTab', this)">Contacts</button>
+        <button onclick="switchTab('profileTab', this)">Profile</button>
       </div>
     </div>
 
+    <!-- Hidden audio element for incoming voice -->
+    <audio id="remoteAudio" autoplay></audio>
+
     <script>
-      const tabs = document.querySelectorAll(".tab");
-      const sections = document.querySelectorAll(".section");
+      let localId =
+        localStorage.getItem("fixedPeerId") ||
+        "user" + Math.floor(Math.random() * 10000);
+      localStorage.setItem("fixedPeerId", localId);
 
-      function switchTab(id) {
-        sections.forEach((sec) => sec.classList.remove("active"));
-        tabs.forEach((tab) => tab.classList.remove("active"));
-
-        document.getElementById(id).classList.add("active");
-        event.target.classList.add("active");
-      }
-
-      const peerIdInput = document.getElementById("peerIdInput");
-      const yourIdInput = document.getElementById("yourId");
-      const yourFixedId = document.getElementById("yourFixedId");
-      const callBtn = document.getElementById("callBtn");
-      const acceptBtn = document.getElementById("acceptBtn");
-      const declineBtn = document.getElementById("declineBtn");
-      const incomingCallDiv = document.getElementById("incomingCall");
-      const callControls = document.getElementById("callControls");
-      const endCallBtn = document.getElementById("endCallBtn");
-      const connectedWithSpan = document.getElementById("connectedWith");
-      const status = document.getElementById("status");
-
-      const nameInput = document.getElementById("nameInput");
-      const saveIdInput = document.getElementById("saveIdInput");
-      const saveBtn = document.getElementById("saveBtn");
-      const savedUsersDiv = document.getElementById("savedUsers");
-
-      let savedOwnId = localStorage.getItem("peer-id") || generateRandomId();
-      localStorage.setItem("peer-id", savedOwnId);
-      yourIdInput.value = savedOwnId;
-      yourFixedId.textContent = savedOwnId;
-
-      const peer = new Peer(savedOwnId, {
-        config: { iceServers: [{ url: "stun:stun.l.google.com:19302" }] },
-      });
-
+      let peer = new Peer(localId);
       let currentCall = null;
 
-      peer.on("call", (call) => {
-        currentCall = call;
-        incomingCallDiv.style.display = "block";
+      const myPeerIdDisplay = document.getElementById("myPeerId");
+      const callStatus = document.getElementById("callStatus");
+      const remoteAudio = document.getElementById("remoteAudio");
+      const inCallControls = document.getElementById("inCallControls");
+      const incomingCallControls = document.getElementById(
+        "incomingCallControls"
+      );
 
-        acceptBtn.onclick = () => {
-          navigator.mediaDevices
-            .getUserMedia({ audio: true })
-            .then((stream) => {
-              call.answer(stream);
-              handleCallStream(call, stream);
-            });
-          incomingCallDiv.style.display = "none";
-        };
-
-        declineBtn.onclick = () => {
-          call.close();
-          currentCall = null;
-          incomingCallDiv.style.display = "none";
-        };
+      peer.on("open", (id) => {
+        myPeerIdDisplay.textContent = id;
+        loadContacts();
       });
 
-      callBtn.onclick = () => {
-        const otherId = peerIdInput.value.trim();
-        if (!otherId) return alert("Enter a Peer ID!");
+      peer.on("call", (call) => {
+        callStatus.textContent = "Incoming Call from: " + call.peer;
+        incomingCallControls.style.display = "flex";
+        currentCall = call;
+      });
+
+      function startCall() {
+        const nameOrId = document.getElementById("callIdInput").value.trim();
+        const contacts = JSON.parse(localStorage.getItem("contacts") || "{}");
+        const targetId = contacts[nameOrId] || nameOrId;
 
         navigator.mediaDevices.getUserMedia({ audio: true }).then((stream) => {
-          const call = peer.call(otherId, stream);
+          const call = peer.call(targetId, stream);
           currentCall = call;
-          handleCallStream(call, stream);
-        });
-      };
+          callStatus.textContent = "Calling " + targetId + "...";
+          inCallControls.style.display = "flex";
 
-      endCallBtn.onclick = () => {
+          call.on("stream", (remoteStream) => {
+            remoteAudio.srcObject = remoteStream;
+          });
+
+          call.on("close", () => {
+            callStatus.textContent = "Call Ended";
+            inCallControls.style.display = "none";
+          });
+
+          call.on("error", () => {
+            callStatus.textContent = "Call Failed or Rejected";
+            inCallControls.style.display = "none";
+          });
+        });
+      }
+
+      function acceptCall() {
+        navigator.mediaDevices.getUserMedia({ audio: true }).then((stream) => {
+          currentCall.answer(stream);
+          callStatus.textContent = "Call Connected";
+          inCallControls.style.display = "flex";
+          incomingCallControls.style.display = "none";
+
+          currentCall.on("stream", (remoteStream) => {
+            remoteAudio.srcObject = remoteStream;
+          });
+
+          currentCall.on("close", () => {
+            callStatus.textContent = "Call Ended";
+            inCallControls.style.display = "none";
+          });
+        });
+      }
+
+      function denyCall() {
+        currentCall.close();
+        callStatus.textContent = "Call Rejected";
+        incomingCallControls.style.display = "none";
+      }
+
+      function endCall() {
         if (currentCall) {
           currentCall.close();
-          currentCall = null;
-          callControls.style.display = "none";
-          status.textContent = "Call ended.";
-        }
-      };
-
-      function handleCallStream(call, localStream) {
-        status.textContent = "In call...";
-        connectedWithSpan.textContent = call.peer;
-        callControls.style.display = "block";
-
-        call.on("stream", (remoteStream) => {
-          const audio = new Audio();
-          audio.srcObject = remoteStream;
-          audio.play();
-        });
-
-        call.on("close", () => {
-          callControls.style.display = "none";
-          status.textContent = "Call ended.";
-          currentCall = null;
-        });
-      }
-
-      function generateRandomId() {
-        return "user_" + Math.floor(Math.random() * 100000);
-      }
-
-      function generateNewId() {
-        if (!confirm("Generate a new ID? You may lose existing contacts."))
-          return;
-        localStorage.removeItem("peer-id");
-        location.reload();
-      }
-
-      saveBtn.onclick = () => {
-        const name = nameInput.value.trim();
-        const id = saveIdInput.value.trim();
-        if (!name || !id) return alert("Enter both name and ID.");
-        const users = JSON.parse(localStorage.getItem("savedUsers") || "{}");
-        users[name] = id;
-        localStorage.setItem("savedUsers", JSON.stringify(users));
-        nameInput.value = "";
-        saveIdInput.value = "";
-        loadSavedUsers();
-      };
-
-      function loadSavedUsers() {
-        const users = JSON.parse(localStorage.getItem("savedUsers") || "{}");
-        savedUsersDiv.innerHTML = "";
-        for (const name in users) {
-          const div = document.createElement("div");
-          div.innerHTML = `
-          <span>${name}</span>
-          <div>
-            <button onclick="callSaved('${users[name]}')">Call</button>
-            <button onclick="deleteUser('${name}')">❌</button>
-          </div>
-        `;
-          savedUsersDiv.appendChild(div);
+          callStatus.textContent = "Call Ended";
+          inCallControls.style.display = "none";
         }
       }
 
-      function callSaved(id) {
-        peerIdInput.value = id;
-        switchTab("callTab");
-        callBtn.click();
+      function saveContact() {
+        const name = document.getElementById("contactName").value.trim();
+        const id = document.getElementById("contactId").value.trim();
+        if (!name || !id) return;
+
+        const contacts = JSON.parse(localStorage.getItem("contacts") || "{}");
+        contacts[name] = id;
+        localStorage.setItem("contacts", JSON.stringify(contacts));
+        loadContacts();
       }
 
-      function deleteUser(name) {
-        const users = JSON.parse(localStorage.getItem("savedUsers") || "{}");
-        delete users[name];
-        localStorage.setItem("savedUsers", JSON.stringify(users));
-        loadSavedUsers();
+      function loadContacts() {
+        const contactList = document.getElementById("contactList");
+        const contacts = JSON.parse(localStorage.getItem("contacts") || "{}");
+        contactList.innerHTML = "";
+
+        for (const name in contacts) {
+          const btn = document.createElement("button");
+          btn.textContent = `${name} (${contacts[name]})`;
+          btn.onclick = () => {
+            document.getElementById("callIdInput").value = name;
+            switchTab(
+              "callTab",
+              document.querySelectorAll(".tab-bar button")[0]
+            );
+            startCall();
+          };
+          contactList.appendChild(btn);
+        }
       }
 
-      window.callSaved = callSaved;
-      window.deleteUser = deleteUser;
+      function switchTab(tabId, button) {
+        document
+          .querySelectorAll(".screen")
+          .forEach((tab) => tab.classList.remove("active"));
+        document.getElementById(tabId).classList.add("active");
 
-      loadSavedUsers();
+        document
+          .querySelectorAll(".tab-bar button")
+          .forEach((btn) => btn.classList.remove("active"));
+        button.classList.add("active");
+      }
     </script>
   </body>
 </html>
