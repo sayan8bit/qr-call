@@ -1,56 +1,53 @@
 <!DOCTYPE html>
-<html lang="en">
+<html>
   <head>
-    <meta charset="UTF-8" />
     <title>PeerJS Video Call</title>
-    <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
     <style>
       body {
-        font-family: sans-serif;
+        font-family: Arial, sans-serif;
+        text-align: center;
+        background: #111;
+        color: white;
         padding: 20px;
-        display: flex;
-        flex-direction: column;
-        align-items: center;
+      }
+      video {
+        width: 45%;
+        max-width: 400px;
+        margin: 10px;
+        border: 2px solid white;
+        border-radius: 10px;
       }
       input,
       button {
         padding: 10px;
-        margin: 5px;
-      }
-      video {
-        width: 45%;
-        border: 2px solid black;
         margin: 10px;
+        font-size: 1em;
       }
-      #video-box {
-        display: flex;
-        justify-content: center;
-        flex-wrap: wrap;
+      #my-id {
+        color: #0f0;
+        font-weight: bold;
       }
     </style>
   </head>
   <body>
-    <h2>PeerJS Video Call</h2>
+    <h2>🎥 PeerJS Video Call</h2>
     <p>Your ID: <span id="my-id">Loading...</span></p>
-
-    <input type="text" id="peer-id-input" placeholder="Enter friend's ID" />
+    <input type="text" id="peer-id-input" placeholder="Enter other ID" />
     <button id="call-btn">Start Call</button>
+    <br /><br />
+    <video id="local-video" autoplay muted playsinline></video>
+    <video id="remote-video" autoplay playsinline></video>
 
-    <div id="video-box">
-      <video id="local-video" autoplay muted></video>
-      <video id="remote-video" autoplay></video>
-    </div>
-
+    <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
     <script>
-      // Create a fixed ID (won't change on refresh)
+      // Fixed Peer ID from localStorage
       let myId = localStorage.getItem("myFixedPeerId");
       if (!myId) {
         myId = "user-" + Math.random().toString(36).substring(2, 8);
         localStorage.setItem("myFixedPeerId", myId);
       }
 
-      const peer = new Peer(myId);
-      let localStream = null;
+      const peer = new Peer(myId, { debug: 2 });
 
       const myIdSpan = document.getElementById("my-id");
       const callBtn = document.getElementById("call-btn");
@@ -58,45 +55,71 @@
       const localVideo = document.getElementById("local-video");
       const remoteVideo = document.getElementById("remote-video");
 
-      // Display my peer ID
+      let localStream = null;
+
+      // Show own ID when ready
       peer.on("open", (id) => {
+        console.log("PeerJS opened with ID:", id);
         myIdSpan.textContent = id;
       });
 
-      // Get camera/mic access
+      peer.on("error", (err) => {
+        console.error("Peer error:", err);
+        alert("PeerJS Error: " + err.message);
+      });
+
+      // Get camera and mic
       navigator.mediaDevices
         .getUserMedia({ video: true, audio: true })
         .then((stream) => {
+          console.log("Got local media stream");
           localStream = stream;
           localVideo.srcObject = stream;
         })
         .catch((err) => {
+          console.error("Media access error:", err);
           alert("Could not access camera/mic: " + err.message);
         });
 
-      // When someone calls me
+      // Answer incoming call
       peer.on("call", (call) => {
-        if (!localStream) return;
+        console.log("Incoming call from", call.peer);
+        if (!localStream) {
+          alert("No local stream to answer call!");
+          return;
+        }
         call.answer(localStream);
         call.on("stream", (remoteStream) => {
+          console.log("Received remote stream");
           remoteVideo.srcObject = remoteStream;
+        });
+        call.on("error", (err) => {
+          console.error("Call error:", err);
         });
       });
 
-      // When I call someone
+      // Make a call
       callBtn.onclick = () => {
         const peerId = peerIdInput.value.trim();
-        if (!peerId || !localStream) {
-          alert("Enter a valid ID and allow camera/mic access");
+        if (!peerId) {
+          alert("Enter a valid peer ID.");
+          return;
+        }
+        if (!localStream) {
+          alert("Waiting for camera/mic...");
           return;
         }
 
+        console.log("Calling", peerId);
         const call = peer.call(peerId, localStream);
+
         call.on("stream", (remoteStream) => {
+          console.log("Connected and got remote stream");
           remoteVideo.srcObject = remoteStream;
         });
 
         call.on("error", (err) => {
+          console.error("Call error:", err);
           alert("Call failed: " + err.message);
         });
       };
