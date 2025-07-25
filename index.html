@@ -1,32 +1,36 @@
 <!DOCTYPE html>
 <html>
   <head>
-    <title>PeerJS Audio Call</title>
+    <title>PeerJS Video Call</title>
     <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
     <style>
       body {
         font-family: Arial;
         text-align: center;
-        background: #f0f0f0;
-        padding: 40px;
+        background: #f2f2f2;
+        padding: 30px;
       }
       input,
       button {
         padding: 10px;
-        margin: 5px;
+        margin: 10px 5px;
         width: 250px;
         font-size: 16px;
       }
-      audio {
-        margin-top: 20px;
+      video {
+        width: 40%;
+        margin: 10px;
+        border: 3px solid #444;
+        border-radius: 10px;
       }
-      h2 {
-        color: #333;
+      #status {
+        font-size: 18px;
+        margin-top: 10px;
       }
     </style>
   </head>
   <body>
-    <h2>🎤 PeerJS Audio Call</h2>
+    <h2>🎥 PeerJS Video Call</h2>
 
     <p><strong>Your ID:</strong> <span id="my-id">Loading...</span></p>
 
@@ -36,100 +40,118 @@
     <button onclick="endCall()">❌ End Call</button>
 
     <p>Status: <span id="status">Waiting...</span></p>
+    <p>Call Time: <span id="timer">00:00</span></p>
 
-    <audio id="remoteAudio" autoplay controls></audio>
+    <div>
+      <video id="localVideo" autoplay muted></video>
+      <video id="remoteVideo" autoplay></video>
+    </div>
 
     <script>
       let localStream = null;
       let currentCall = null;
+      let timerInterval = null;
+      let startTime = null;
 
-      // Generate fixed ID
+      // Persistent peer ID
       let myId = localStorage.getItem("peer-fixed-id");
       if (!myId) {
         myId = "user-" + Math.random().toString(36).substring(2, 6);
         localStorage.setItem("peer-fixed-id", myId);
       }
 
-      // Create peer
-      const peer = new Peer(myId, {
-        debug: 1,
-      });
+      const peer = new Peer(myId);
 
-      // Display own ID
       peer.on("open", (id) => {
         document.getElementById("my-id").innerText = id;
       });
 
-      // Incoming call handler
       peer.on("call", (call) => {
         updateStatus("Incoming call...");
-        navigator.mediaDevices
-          .getUserMedia({ audio: true })
+        getMediaStream()
           .then((stream) => {
             localStream = stream;
             call.answer(stream);
             currentCall = call;
             setupCallEvents(call);
+            document.getElementById("localVideo").srcObject = stream;
           })
           .catch((err) => {
-            console.error("Mic access denied:", err);
-            updateStatus("Microphone permission denied");
+            console.error("Mic/camera error:", err);
+            updateStatus("Permission denied");
           });
       });
 
-      // Call setup
       function startCall() {
         const peerId = document.getElementById("peer-id").value;
-        if (!peerId) {
-          alert("Please enter a peer ID to call.");
-          return;
-        }
-        navigator.mediaDevices
-          .getUserMedia({ audio: true })
+        if (!peerId) return alert("Please enter peer ID to call.");
+
+        getMediaStream()
           .then((stream) => {
             localStream = stream;
+            document.getElementById("localVideo").srcObject = stream;
             const call = peer.call(peerId, stream);
             currentCall = call;
             updateStatus("Calling...");
             setupCallEvents(call);
           })
           .catch((err) => {
-            console.error("Mic access denied:", err);
-            updateStatus("Microphone permission denied");
+            console.error("Mic/camera error:", err);
+            updateStatus("Permission denied");
           });
       }
 
-      // End the call
-      function endCall() {
-        if (currentCall) {
-          currentCall.close();
-          updateStatus("Call ended");
-        }
-        if (localStream) {
-          localStream.getTracks().forEach((track) => track.stop());
-        }
-        document.getElementById("remoteAudio").srcObject = null;
+      function getMediaStream() {
+        return navigator.mediaDevices.getUserMedia({
+          video: true,
+          audio: true,
+        });
       }
 
-      // Handle remote stream
       function setupCallEvents(call) {
         call.on("stream", (remoteStream) => {
-          const audio = document.getElementById("remoteAudio");
-          audio.srcObject = remoteStream;
-          audio.play().catch((err) => {
-            console.error("Audio play failed:", err);
-          });
+          document.getElementById("remoteVideo").srcObject = remoteStream;
           updateStatus("In Call");
+          startTimer();
         });
 
         call.on("close", () => {
-          updateStatus("Call ended");
-          document.getElementById("remoteAudio").srcObject = null;
+          updateStatus("Call Ended");
+          document.getElementById("remoteVideo").srcObject = null;
+          stopTimer();
         });
+      }
+
+      function endCall() {
+        if (currentCall) {
+          currentCall.close();
+        }
+        if (localStream) {
+          localStream.getTracks().forEach((track) => track.stop());
+          document.getElementById("localVideo").srcObject = null;
+        }
+        document.getElementById("remoteVideo").srcObject = null;
+        updateStatus("Call Ended");
+        stopTimer();
       }
 
       function updateStatus(text) {
         document.getElementById("status").innerText = text;
+      }
+
+      function startTimer() {
+        startTime = Date.now();
+        timerInterval = setInterval(() => {
+          const elapsed = Math.floor((Date.now() - startTime) / 1000);
+          const mins = String(Math.floor(elapsed / 60)).padStart(2, "0");
+          const secs = String(elapsed % 60).padStart(2, "0");
+          document.getElementById("timer").innerText = `${mins}:${secs}`;
+        }, 1000);
+      }
+
+      function stopTimer() {
+        clearInterval(timerInterval);
+        document.getElementById("timer").innerText = "00:00";
       }
     </script>
   </body>
