@@ -1,94 +1,113 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
   <head>
-    <title>Video Call with PeerJS</title>
+    <meta charset="UTF-8" />
+    <title>PeerJS Video Call</title>
     <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
     <style>
       body {
-        text-align: center;
-        font-family: sans-serif;
+        font-family: Arial;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        padding: 20px;
       }
       input,
       button {
-        margin: 10px;
-        padding: 5px;
+        margin: 8px;
+        padding: 8px;
+        font-size: 16px;
       }
       video {
         width: 45%;
-        border: 2px solid black;
         margin: 10px;
+        border: 2px solid black;
+      }
+      .videos {
+        display: flex;
+        flex-wrap: wrap;
+        justify-content: center;
       }
     </style>
   </head>
   <body>
-    <h2>📞 PeerJS Video Call</h2>
-    <p>Your ID: <span id="my-id"></span></p>
-    <input type="text" id="remote-id" placeholder="Friend's ID" />
+    <h2>PeerJS Video Call (Mobile ↔ PC)</h2>
+    <p><b>Your ID:</b> <span id="my-id">Loading...</span></p>
+    <input id="peer-id" placeholder="Enter peer ID" />
     <button id="call-btn">Start Call</button>
-
-    <div>
+    <div class="videos">
       <video id="local-video" autoplay muted></video>
       <video id="remote-video" autoplay></video>
     </div>
 
     <script>
-      const peer = new Peer({
-        // Optional: Use a custom PeerServer for better stability
-        config: {
-          iceServers: [
-            { urls: "stun:stun.l.google.com:19302" }, // public STUN
-            {
-              urls: "turn:relay1.expressturn.com:3478",
-              username: "ef3G7b9WZx8z5JW3wV5i5Q==",
-              credential: "L+gRMbRUzIGjcS4HwFhGma8smow=",
-            },
-          ],
-        },
-      });
-
-      const myIdEl = document.getElementById("my-id");
-      const remoteIdInput = document.getElementById("remote-id");
+      const myIdSpan = document.getElementById("my-id");
       const callBtn = document.getElementById("call-btn");
+      const peerIdInput = document.getElementById("peer-id");
       const localVideo = document.getElementById("local-video");
       const remoteVideo = document.getElementById("remote-video");
 
       let localStream;
 
-      // Step 1: Get webcam/mic
+      // Create a peer with a fixed ID (shorter)
+      const myId = "user-" + Math.random().toString(36).substring(2, 6);
+      const peer = new Peer(myId, {
+        host: "0.peerjs.com", // Public PeerServer
+        port: 443,
+        path: "/",
+        secure: true,
+        config: {
+          iceServers: [
+            { urls: "stun:stun.l.google.com:19302" }, // Public STUN
+            {
+              urls: "turn:openrelay.metered.ca:80",
+              username: "openrelayproject",
+              credential: "openrelayproject",
+            },
+          ],
+        },
+      });
+
+      peer.on("open", (id) => {
+        myIdSpan.textContent = id;
+        console.log("Connected with ID:", id);
+      });
+
+      peer.on("error", (err) => {
+        alert("Peer error: " + err);
+        console.error(err);
+      });
+
       navigator.mediaDevices
         .getUserMedia({ video: true, audio: true })
         .then((stream) => {
-          localVideo.srcObject = stream;
           localStream = stream;
+          localVideo.srcObject = stream;
         })
         .catch((err) => {
-          alert("Failed to get media: " + err.message);
+          alert("Error accessing camera/mic: " + err.message);
         });
 
-      // Step 2: Show my ID
-      peer.on("open", (id) => {
-        myIdEl.textContent = id;
-      });
+      callBtn.onclick = () => {
+        const otherId = peerIdInput.value.trim();
+        if (!otherId || !localStream) return alert("Enter a valid ID");
 
-      // Step 3: Answer incoming call
+        const call = peer.call(otherId, localStream);
+        call.on("stream", (remoteStream) => {
+          remoteVideo.srcObject = remoteStream;
+        });
+
+        call.on("close", () => {
+          alert("Call ended.");
+        });
+      };
+
       peer.on("call", (call) => {
         call.answer(localStream);
         call.on("stream", (remoteStream) => {
           remoteVideo.srcObject = remoteStream;
         });
       });
-
-      // Step 4: Call friend
-      callBtn.onclick = () => {
-        const remoteId = remoteIdInput.value.trim();
-        if (!remoteId || !localStream)
-          return alert("Missing friend's ID or camera access.");
-
-        const call = peer.call(remoteId, localStream);
-        call.on("stream", (remoteStream) => {
-          remoteVideo.srcObject = remoteStream;
-        });
-      };
     </script>
   </body>
 </html>
