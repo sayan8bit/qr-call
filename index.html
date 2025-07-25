@@ -1,195 +1,137 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
   <head>
-    <title>Audio Call System</title>
+    <meta charset="UTF-8" />
+    <title>PeerJS Audio Call (Fixed Short ID)</title>
     <style>
       body {
-        font-family: sans-serif;
-        background: #111;
-        color: white;
-        padding: 20px;
+        font-family: Arial, sans-serif;
+        text-align: center;
+        padding: 30px;
+        background-color: #f0f0f0;
       }
-      #users button {
-        margin: 5px;
-        padding: 5px 10px;
-      }
-      .incoming {
-        background: #333;
+      input,
+      button {
         padding: 10px;
-        margin-top: 10px;
+        margin: 10px;
+        font-size: 16px;
       }
-      #callControls,
-      #incomingCall {
-        display: none;
-        margin-top: 10px;
+      #my-id {
+        font-weight: bold;
+        color: green;
       }
       audio {
-        display: none;
-      }
-      .ringing {
-        color: orange;
+        margin-top: 20px;
+        width: 300px;
       }
     </style>
   </head>
   <body>
-    <h2>My ID: <span id="myId"></span></h2>
+    <h2>🎧 PeerJS Audio Call</h2>
+    <p>Your ID: <span id="my-id">Loading...</span></p>
+    <input type="text" id="peer-id" placeholder="Enter Peer ID to call" />
+    <br />
+    <button id="callBtn">Call</button>
+    <button id="endBtn" disabled>End Call</button>
+    <audio id="remoteAudio" autoplay controls></audio>
 
-    <input id="userIdInput" placeholder="Enter User ID to call" />
-    <button onclick="addUser()">Add User</button>
-
-    <h3>Saved Users</h3>
-    <div id="users"></div>
-
-    <div id="incomingCall" class="incoming">
-      <p id="incomingFrom"></p>
-      <button onclick="answerCall()">Answer</button>
-      <button onclick="declineCall()">Decline</button>
-    </div>
-
-    <div id="callControls">
-      <p><span id="callStatus">Calling...</span> <span id="callTime"></span></p>
-      <button onclick="endCall()">End Call</button>
-    </div>
-
-    <audio id="remoteAudio" autoplay></audio>
-    <audio
-      id="ringtone"
-      src="https://actions.google.com/sounds/v1/alarms/phone_alerts_and_rings.ogg"
-      loop
-    ></audio>
-
-    <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/peerjs@1.5.2/dist/peerjs.min.js"></script>
     <script>
-      const myId =
-        localStorage.getItem("peer-id") ||
-        `user-${Math.random().toString(36).substr(2, 5)}`;
-      localStorage.setItem("peer-id", myId);
-      document.getElementById("myId").textContent = myId;
-
-      const peer = new Peer(myId, { debug: 2 });
-      let currentCall = null;
-      let callTimer = null;
-      let callStartTime = null;
-      const ringtone = document.getElementById("ringtone");
+      const myIdSpan = document.getElementById("my-id");
+      const callBtn = document.getElementById("callBtn");
+      const endBtn = document.getElementById("endBtn");
+      const peerIdInput = document.getElementById("peer-id");
       const remoteAudio = document.getElementById("remoteAudio");
 
-      // Load saved users
-      const savedUsers = JSON.parse(
-        localStorage.getItem("saved-users") || "[]"
-      );
-      function renderUsers() {
-        const usersDiv = document.getElementById("users");
-        usersDiv.innerHTML = "";
-        savedUsers.forEach((id) => {
-          const btn = document.createElement("button");
-          btn.textContent = id;
-          btn.onclick = () => callUser(id);
-          usersDiv.appendChild(btn);
-        });
-      }
-      renderUsers();
+      let localStream;
+      let currentCall;
 
-      function addUser() {
-        const id = document.getElementById("userIdInput").value.trim();
-        if (id && !savedUsers.includes(id) && id !== myId) {
-          savedUsers.push(id);
-          localStorage.setItem("saved-users", JSON.stringify(savedUsers));
-          renderUsers();
-          document.getElementById("userIdInput").value = "";
+      // Generate or load a short persistent ID
+      function getOrCreatePeerID() {
+        const savedId = localStorage.getItem("peer-fixed-id");
+        if (savedId) return savedId;
+        const newId = generateShortID(5);
+        localStorage.setItem("peer-fixed-id", newId);
+        return newId;
+      }
+
+      // Generate short random ID
+      function generateShortID(length) {
+        const chars =
+          "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
+        let result = "";
+        for (let i = 0; i < length; i++) {
+          result += chars.charAt(Math.floor(Math.random() * chars.length));
         }
+        return result;
       }
 
-      async function callUser(targetId) {
-        stopAudio(); // stop anything before
-        const stream = await navigator.mediaDevices.getUserMedia({
-          audio: true,
-        });
-        const call = peer.call(targetId, stream);
-        handleCall(call, stream, true);
-      }
+      const myPeerID = getOrCreatePeerID();
 
-      peer.on("call", async (incomingCall) => {
-        ringtone.play();
-        window.incomingCall = incomingCall;
-        document.getElementById(
-          "incomingFrom"
-        ).textContent = `Incoming call from ${incomingCall.peer}`;
-        document.getElementById("incomingCall").style.display = "block";
+      // Create PeerJS with fixed ID
+      const peer = new Peer(myPeerID);
+
+      peer.on("open", (id) => {
+        myIdSpan.textContent = id;
       });
 
-      async function answerCall() {
-        document.getElementById("incomingCall").style.display = "none";
-        ringtone.pause();
-        const stream = await navigator.mediaDevices.getUserMedia({
-          audio: true,
-        });
-        window.incomingCall.answer(stream);
-        handleCall(window.incomingCall, stream, false);
-      }
+      peer.on("call", async (call) => {
+        const stream = await getAudioStream();
+        call.answer(stream);
+        handleCall(call, stream);
+      });
 
-      function declineCall() {
-        document.getElementById("incomingCall").style.display = "none";
-        ringtone.pause();
-        window.incomingCall.close();
-      }
+      callBtn.onclick = async () => {
+        const peerId = peerIdInput.value.trim();
+        if (!peerId) return alert("Please enter a valid Peer ID!");
 
-      function handleCall(call, localStream, isCaller) {
-        if (currentCall) currentCall.close(); // Only one call at a time
+        const stream = await getAudioStream();
+        const call = peer.call(peerId, stream);
+        handleCall(call, stream);
+      };
+
+      endBtn.onclick = () => {
+        if (currentCall) {
+          currentCall.close();
+          currentCall = null;
+          remoteAudio.srcObject = null;
+          endBtn.disabled = true;
+        }
+      };
+
+      function handleCall(call, stream) {
         currentCall = call;
-
-        document.getElementById("callControls").style.display = "block";
-        document.getElementById("callStatus").textContent = isCaller
-          ? "Calling..."
-          : "In Call";
 
         call.on("stream", (remoteStream) => {
           remoteAudio.srcObject = remoteStream;
-          remoteAudio.play();
-          document.getElementById("callStatus").textContent = "In Call";
-          startTimer();
+          endBtn.disabled = false;
         });
 
         call.on("close", () => {
-          endCall(true);
+          remoteAudio.srcObject = null;
+          endBtn.disabled = true;
+          currentCall = null;
         });
 
         call.on("error", (err) => {
           console.error("Call error:", err);
-          endCall(true);
+          alert("Call failed.");
+          endBtn.disabled = true;
         });
       }
 
-      function endCall(fromRemote = false) {
-        if (currentCall) {
-          currentCall.close();
-          currentCall = null;
+      async function getAudioStream() {
+        if (!localStream) {
+          try {
+            localStream = await navigator.mediaDevices.getUserMedia({
+              audio: true,
+            });
+          } catch (err) {
+            alert("Microphone permission is required.");
+            throw err;
+          }
         }
-        stopAudio();
-        stopTimer();
-        document.getElementById("callControls").style.display = "none";
-        if (!fromRemote) peer.disconnect(); // Trigger other side to close too
-      }
-
-      function stopAudio() {
-        if (remoteAudio.srcObject) {
-          remoteAudio.srcObject.getTracks().forEach((t) => t.stop());
-          remoteAudio.srcObject = null;
-        }
-      }
-
-      function startTimer() {
-        callStartTime = Date.now();
-        callTimer = setInterval(() => {
-          const elapsed = Math.floor((Date.now() - callStartTime) / 1000);
-          const mins = String(Math.floor(elapsed / 60)).padStart(2, "0");
-          const secs = String(elapsed % 60).padStart(2, "0");
-          document.getElementById("callTime").textContent = `${mins}:${secs}`;
-        }, 1000);
-      }
-
-      function stopTimer() {
-        clearInterval(callTimer);
-        document.getElementById("callTime").textContent = "";
+        return localStream;
       }
     </script>
   </body>
