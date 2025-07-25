@@ -1,0 +1,168 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Audio Call System</title>
+    <style>
+      body {
+        font-family: Arial, sans-serif;
+        background: #f0f2f5;
+        padding: 20px;
+        color: #333;
+      }
+
+      .container {
+        max-width: 400px;
+        margin: auto;
+        background: white;
+        padding: 20px;
+        border-radius: 12px;
+        box-shadow: 0 0 10px #ccc;
+      }
+
+      input {
+        width: 100%;
+        padding: 8px;
+        margin-top: 10px;
+        margin-bottom: 10px;
+      }
+
+      button {
+        padding: 10px;
+        background: #007bff;
+        color: white;
+        border: none;
+        cursor: pointer;
+        margin-top: 5px;
+      }
+
+      button:hover {
+        background: #0056b3;
+      }
+
+      #users button {
+        margin-right: 5px;
+        margin-top: 5px;
+      }
+
+      .qr {
+        text-align: center;
+        margin-bottom: 10px;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="container">
+      <h2>🎧 Audio Call</h2>
+      <p>Your ID: <span id="my-id">Loading...</span></p>
+
+      <div class="qr">
+        <canvas id="qrCanvas"></canvas>
+        <p><button onclick="copyID()">📋 Copy ID</button></p>
+      </div>
+
+      <input type="text" id="peer-id" placeholder="Enter Peer ID or scan QR" />
+      <button onclick="addUser()">➕ Add User</button>
+      <div id="users"></div>
+
+      <hr />
+      <audio id="remote-audio" autoplay></audio>
+    </div>
+
+    <!-- PeerJS -->
+    <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
+    <!-- QR Code Generator -->
+    <script src="https://cdn.jsdelivr.net/npm/qrious/dist/qrious.min.js"></script>
+
+    <script>
+      // Generate or retrieve persistent ID
+      let myID = localStorage.getItem("fixedID");
+      if (!myID) {
+        myID = "user_" + Math.random().toString(36).substring(2, 8);
+        localStorage.setItem("fixedID", myID);
+      }
+
+      const peer = new Peer(myID);
+      const remoteAudio = document.getElementById("remote-audio");
+      const myIdSpan = document.getElementById("my-id");
+      const usersDiv = document.getElementById("users");
+      const peerIdInput = document.getElementById("peer-id");
+
+      peer.on("open", (id) => {
+        myIdSpan.textContent = id;
+        generateQR(id);
+        loadUsers();
+      });
+
+      peer.on("call", (call) => {
+        navigator.mediaDevices.getUserMedia({ audio: true }).then((stream) => {
+          call.answer(stream);
+          call.on("stream", (remoteStream) => {
+            remoteAudio.srcObject = remoteStream;
+          });
+        });
+      });
+
+      function callUser(id) {
+        navigator.mediaDevices.getUserMedia({ audio: true }).then((stream) => {
+          const call = peer.call(id, stream);
+          call.on("stream", (remoteStream) => {
+            remoteAudio.srcObject = remoteStream;
+          });
+        });
+      }
+
+      function addUser() {
+        const id = peerIdInput.value.trim();
+        if (!id) return;
+
+        let users = JSON.parse(localStorage.getItem("userList") || "[]");
+        if (!users.includes(id) && id !== myID) {
+          users.push(id);
+          localStorage.setItem("userList", JSON.stringify(users));
+          loadUsers();
+        }
+        peerIdInput.value = "";
+      }
+
+      function loadUsers() {
+        usersDiv.innerHTML = "";
+        let users = JSON.parse(localStorage.getItem("userList") || "[]");
+
+        users.forEach((id) => {
+          const btn = document.createElement("button");
+          btn.textContent = `📞 Call ${id}`;
+          btn.onclick = () => callUser(id);
+
+          const del = document.createElement("button");
+          del.textContent = "❌";
+          del.onclick = () => removeUser(id);
+
+          usersDiv.appendChild(btn);
+          usersDiv.appendChild(del);
+        });
+      }
+
+      function removeUser(id) {
+        let users = JSON.parse(localStorage.getItem("userList") || "[]");
+        users = users.filter((u) => u !== id);
+        localStorage.setItem("userList", JSON.stringify(users));
+        loadUsers();
+      }
+
+      function generateQR(id) {
+        const qr = new QRious({
+          element: document.getElementById("qrCanvas"),
+          value: id,
+          size: 150,
+        });
+      }
+
+      function copyID() {
+        navigator.clipboard.writeText(myID);
+        alert("Copied your ID!");
+      }
+    </script>
+  </body>
+</html>
