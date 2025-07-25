@@ -4,18 +4,19 @@
     <meta charset="UTF-8" />
     <title>Voice Call App</title>
     <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <style>
+      /* [Styles unchanged from your latest version with small updates] */
       * {
         margin: 0;
         padding: 0;
-        font-family: Arial, sans-serif;
         box-sizing: border-box;
+        font-family: sans-serif;
       }
-
-      body,
-      html {
+      html,
+      body {
         height: 100%;
-        background: #f4f4f4;
+        background: #f0f0f0;
       }
 
       .app {
@@ -34,7 +35,6 @@
         display: none;
         padding: 20px;
       }
-
       .screen.active {
         display: block;
       }
@@ -58,15 +58,41 @@
         background: #e0e0e0;
       }
 
-      .contact-list button {
-        display: block;
-        width: 100%;
+      .input-group {
+        margin: 15px 0;
+        display: flex;
+        flex-wrap: wrap;
+        gap: 10px;
+      }
+
+      .input-group input,
+      .input-group button {
         padding: 10px;
-        margin: 5px 0;
-        text-align: left;
+        font-size: 16px;
+        flex: 1 1 100%;
+      }
+
+      .contact-list {
+        margin-top: 10px;
+      }
+
+      .contact-item {
+        display: flex;
+        align-items: center;
         background: #fff;
         border: 1px solid #ccc;
         border-radius: 5px;
+        margin-bottom: 5px;
+        padding: 8px;
+      }
+
+      .contact-item input[type="checkbox"] {
+        margin-right: 10px;
+        display: none;
+      }
+
+      .contact-item.show-checkbox input[type="checkbox"] {
+        display: inline-block;
       }
 
       .status {
@@ -74,43 +100,54 @@
         color: green;
       }
 
-      .input-group {
-        margin: 15px 0;
-      }
-
-      .input-group input,
-      .input-group button {
-        padding: 10px;
-        font-size: 16px;
-      }
-
-      .input-group input {
-        width: calc(100% - 110px);
-      }
-
-      .input-group button {
-        width: 100px;
-      }
-
       .call-buttons {
         display: flex;
         justify-content: space-around;
         margin-top: 20px;
+        flex-wrap: wrap;
+        gap: 10px;
       }
 
       .call-buttons button {
-        padding: 10px 20px;
+        flex: 1 1 45%;
+        padding: 10px;
         font-size: 16px;
-      }
-
-      audio {
-        display: none;
       }
 
       .my-id {
         font-size: 14px;
         color: #555;
         margin-top: 10px;
+      }
+
+      .delete-btn,
+      .select-btn {
+        width: 100%;
+        padding: 10px;
+        background: #e74c3c;
+        color: white;
+        border: none;
+        border-radius: 5px;
+        font-size: 16px;
+        margin-top: 10px;
+        cursor: pointer;
+        display: none;
+      }
+
+      .select-btn {
+        background: #2980b9;
+      }
+
+      audio {
+        display: none;
+      }
+
+      @media (max-width: 480px) {
+        .app {
+          border: none;
+          border-radius: 0;
+          max-width: 100%;
+        }
       }
     </style>
   </head>
@@ -120,11 +157,7 @@
       <div class="screen active" id="callTab">
         <h2>Make a Call</h2>
         <div class="input-group">
-          <input
-            type="text"
-            id="callIdInput"
-            placeholder="Enter ID or Contact Name"
-          />
+          <input type="text" id="callIdInput" placeholder="Enter ID or Name" />
           <button onclick="startCall()">Call</button>
         </div>
         <div id="callStatus" class="status"></div>
@@ -150,6 +183,14 @@
           <button onclick="saveContact()">Save</button>
         </div>
         <div class="contact-list" id="contactList"></div>
+        <button class="select-btn" onclick="toggleCheckboxes()">Select</button>
+        <button
+          class="delete-btn"
+          onclick="deleteSelectedContacts()"
+          id="deleteBtn"
+        >
+          Delete Selected
+        </button>
       </div>
 
       <!-- Profile Tab -->
@@ -168,13 +209,10 @@
       </div>
     </div>
 
-    <!-- Hidden audio element for incoming voice -->
     <audio id="remoteAudio" autoplay></audio>
 
     <script>
-      let localId =
-        localStorage.getItem("fixedPeerId") ||
-        "user" + Math.floor(Math.random() * 10000);
+      const localId = "user" + Math.floor(1000 + Math.random() * 9000);
       localStorage.setItem("fixedPeerId", localId);
 
       let peer = new Peer(localId);
@@ -187,6 +225,9 @@
       const incomingCallControls = document.getElementById(
         "incomingCallControls"
       );
+      const deleteBtn = document.getElementById("deleteBtn");
+      const contactList = document.getElementById("contactList");
+      let selecting = false;
 
       peer.on("open", (id) => {
         myPeerIdDisplay.textContent = id;
@@ -194,7 +235,7 @@
       });
 
       peer.on("call", (call) => {
-        callStatus.textContent = "Incoming Call from: " + call.peer;
+        callStatus.textContent = "Incoming call from: " + call.peer;
         incomingCallControls.style.display = "flex";
         currentCall = call;
       });
@@ -203,6 +244,11 @@
         const nameOrId = document.getElementById("callIdInput").value.trim();
         const contacts = JSON.parse(localStorage.getItem("contacts") || "{}");
         const targetId = contacts[nameOrId] || nameOrId;
+
+        if (!targetId) {
+          callStatus.textContent = "Invalid ID or contact.";
+          return;
+        }
 
         navigator.mediaDevices.getUserMedia({ audio: true }).then((stream) => {
           const call = peer.call(targetId, stream);
@@ -245,14 +291,18 @@
       }
 
       function denyCall() {
-        currentCall.close();
-        callStatus.textContent = "Call Rejected";
-        incomingCallControls.style.display = "none";
+        if (currentCall) {
+          currentCall.close(); // Triggers error/close on caller
+          currentCall = null;
+          callStatus.textContent = "Call Rejected";
+          incomingCallControls.style.display = "none";
+        }
       }
 
       function endCall() {
         if (currentCall) {
           currentCall.close();
+          currentCall = null;
           callStatus.textContent = "Call Ended";
           inCallControls.style.display = "none";
         }
@@ -270,23 +320,60 @@
       }
 
       function loadContacts() {
-        const contactList = document.getElementById("contactList");
         const contacts = JSON.parse(localStorage.getItem("contacts") || "{}");
         contactList.innerHTML = "";
 
         for (const name in contacts) {
-          const btn = document.createElement("button");
-          btn.textContent = `${name} (${contacts[name]})`;
-          btn.onclick = () => {
+          const div = document.createElement("div");
+          div.className = "contact-item";
+
+          const checkbox = document.createElement("input");
+          checkbox.type = "checkbox";
+          checkbox.dataset.name = name;
+          checkbox.addEventListener("change", updateDeleteVisibility);
+
+          const label = document.createElement("label");
+          label.textContent = `${name} (${contacts[name]})`;
+          label.onclick = () => {
             document.getElementById("callIdInput").value = name;
-            switchTab(
-              "callTab",
-              document.querySelectorAll(".tab-bar button")[0]
-            );
+            switchTab("callTab", document.querySelector(".tab-bar button"));
             startCall();
           };
-          contactList.appendChild(btn);
+
+          div.appendChild(checkbox);
+          div.appendChild(label);
+          contactList.appendChild(div);
         }
+
+        document.querySelector(".select-btn").style.display = "block";
+        updateDeleteVisibility();
+      }
+
+      function toggleCheckboxes() {
+        selecting = !selecting;
+        document.querySelectorAll(".contact-item").forEach((item) => {
+          if (selecting) item.classList.add("show-checkbox");
+          else item.classList.remove("show-checkbox");
+        });
+        updateDeleteVisibility();
+      }
+
+      function updateDeleteVisibility() {
+        const anyChecked = [
+          ...document.querySelectorAll("#contactList input[type='checkbox']"),
+        ].some((cb) => cb.checked);
+        deleteBtn.style.display = anyChecked ? "block" : "none";
+      }
+
+      function deleteSelectedContacts() {
+        const contacts = JSON.parse(localStorage.getItem("contacts") || "{}");
+        document
+          .querySelectorAll("#contactList input[type='checkbox']")
+          .forEach((box) => {
+            if (box.checked) delete contacts[box.dataset.name];
+          });
+        localStorage.setItem("contacts", JSON.stringify(contacts));
+        loadContacts();
       }
 
       function switchTab(tabId, button) {
