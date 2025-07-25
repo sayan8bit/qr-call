@@ -6,54 +6,52 @@
     <style>
       body {
         font-family: Arial;
-        text-align: center;
         background: #f2f2f2;
+        text-align: center;
         padding: 30px;
       }
       input,
       button {
         padding: 10px;
-        margin: 10px 5px;
+        margin: 5px;
         width: 250px;
         font-size: 16px;
       }
       video {
-        width: 40%;
+        width: 45%;
+        max-width: 300px;
         margin: 10px;
-        border: 3px solid #444;
+        border: 2px solid #444;
         border-radius: 10px;
       }
       #status {
-        font-size: 18px;
-        margin-top: 10px;
+        font-weight: bold;
+        font-size: 16px;
       }
     </style>
   </head>
   <body>
-    <h2>🎥 PeerJS Video Call</h2>
-
+    <h2>📹 PeerJS Video Call</h2>
     <p><strong>Your ID:</strong> <span id="my-id">Loading...</span></p>
-
     <input type="text" id="peer-id" placeholder="Enter peer ID to call" />
     <br />
     <button onclick="startCall()">📞 Call</button>
     <button onclick="endCall()">❌ End Call</button>
-
-    <p>Status: <span id="status">Waiting...</span></p>
-    <p>Call Time: <span id="timer">00:00</span></p>
+    <p>Status: <span id="status">Idle</span></p>
+    <p>Timer: <span id="timer">00:00</span></p>
 
     <div>
-      <video id="localVideo" autoplay muted></video>
-      <video id="remoteVideo" autoplay></video>
+      <video id="localVideo" autoplay muted playsinline></video>
+      <video id="remoteVideo" autoplay playsinline></video>
     </div>
 
     <script>
       let localStream = null;
       let currentCall = null;
-      let timerInterval = null;
+      let timer = null;
       let startTime = null;
 
-      // Persistent peer ID
+      // Get fixed ID from localStorage
       let myId = localStorage.getItem("peer-fixed-id");
       if (!myId) {
         myId = "user-" + Math.random().toString(36).substring(2, 6);
@@ -63,75 +61,85 @@
       const peer = new Peer(myId);
 
       peer.on("open", (id) => {
-        document.getElementById("my-id").innerText = id;
+        document.getElementById("my-id").textContent = id;
       });
 
       peer.on("call", (call) => {
-        updateStatus("Incoming call...");
-        getMediaStream()
+        updateStatus("Incoming Call...");
+        navigator.mediaDevices
+          .getUserMedia({ video: true, audio: true })
           .then((stream) => {
             localStream = stream;
+            document.getElementById("localVideo").srcObject = stream;
+
             call.answer(stream);
             currentCall = call;
-            setupCallEvents(call);
-            document.getElementById("localVideo").srcObject = stream;
+
+            call.on("stream", (remoteStream) => {
+              playRemoteStream(remoteStream);
+            });
+
+            call.on("close", () => {
+              cleanup();
+            });
           })
           .catch((err) => {
-            console.error("Mic/camera error:", err);
-            updateStatus("Permission denied");
+            updateStatus("Permission Denied");
+            console.error(err);
           });
       });
 
       function startCall() {
-        const peerId = document.getElementById("peer-id").value;
-        if (!peerId) return alert("Please enter peer ID to call.");
+        const remoteId = document.getElementById("peer-id").value;
+        if (!remoteId) return alert("Enter a peer ID to call!");
 
-        getMediaStream()
+        navigator.mediaDevices
+          .getUserMedia({ video: true, audio: true })
           .then((stream) => {
             localStream = stream;
             document.getElementById("localVideo").srcObject = stream;
-            const call = peer.call(peerId, stream);
+
+            const call = peer.call(remoteId, stream);
             currentCall = call;
+
             updateStatus("Calling...");
-            setupCallEvents(call);
+
+            call.on("stream", (remoteStream) => {
+              playRemoteStream(remoteStream);
+            });
+
+            call.on("close", () => {
+              cleanup();
+            });
           })
           .catch((err) => {
-            console.error("Mic/camera error:", err);
-            updateStatus("Permission denied");
+            updateStatus("Permission Denied");
+            console.error(err);
           });
       }
 
-      function getMediaStream() {
-        return navigator.mediaDevices.getUserMedia({
-          video: true,
-          audio: true,
-        });
-      }
-
-      function setupCallEvents(call) {
-        call.on("stream", (remoteStream) => {
-          document.getElementById("remoteVideo").srcObject = remoteStream;
-          updateStatus("In Call");
-          startTimer();
-        });
-
-        call.on("close", () => {
-          updateStatus("Call Ended");
-          document.getElementById("remoteVideo").srcObject = null;
-          stopTimer();
-        });
+      function playRemoteStream(stream) {
+        const remoteVideo = document.getElementById("remoteVideo");
+        remoteVideo.srcObject = stream;
+        remoteVideo.play().catch((err) => console.error("Play error:", err));
+        updateStatus("In Call");
+        startTimer();
       }
 
       function endCall() {
         if (currentCall) {
           currentCall.close();
         }
+        cleanup();
+      }
+
+      function cleanup() {
+        updateStatus("Call Ended");
         if (localStream) {
           localStream.getTracks().forEach((track) => track.stop());
           document.getElementById("localVideo").srcObject = null;
         }
         document.getElementById("remoteVideo").srcObject = null;
-        updateStatus("Call Ended");
         stopTimer();
       }
 
@@ -141,7 +149,7 @@
 
       function startTimer() {
         startTime = Date.now();
-        timerInterval = setInterval(() => {
+        timer = setInterval(() => {
           const elapsed = Math.floor((Date.now() - startTime) / 1000);
           const mins = String(Math.floor(elapsed / 60)).padStart(2, "0");
           const secs = String(elapsed % 60).padStart(2, "0");
@@ -150,7 +158,7 @@
       }
 
       function stopTimer() {
-        clearInterval(timerInterval);
+        clearInterval(timer);
         document.getElementById("timer").innerText = "00:00";
       }
     </script>
