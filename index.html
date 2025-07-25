@@ -2,350 +2,78 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>QR Chat with Video Call</title>
+    <title>PeerJS Video Call</title>
     <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/qrcode/build/qrcode.min.js"></script>
-    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+      body {
+        font-family: Arial;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        margin-top: 20px;
+      }
+      video {
+        width: 45%;
+        border: 2px solid black;
+        margin: 10px;
+      }
+      input,
+      button {
+        margin: 5px;
+        padding: 5px;
+      }
+    </style>
   </head>
-  <body class="bg-gray-100 h-screen flex">
-    <!-- Sidebar -->
-    <div class="w-full sm:w-1/3 lg:w-1/4 bg-white border-r flex flex-col">
-      <div class="p-4 border-b flex justify-between items-center">
-        <h1 class="text-lg font-bold">Your ID</h1>
-        <button id="showQRBtn" class="text-blue-500 text-sm">Show QR</button>
-      </div>
-      <div id="my-id" class="text-sm px-4 text-gray-600 break-words"></div>
-      <div id="qr-container" class="hidden p-4">
-        <canvas id="qrcode"></canvas>
-      </div>
-      <div class="p-4">
-        <input
-          id="peerIdInput"
-          class="w-full border px-2 py-1 text-sm"
-          placeholder="Enter Friend ID"
-        />
-        <button
-          id="addUserBtn"
-          class="w-full mt-2 bg-blue-500 text-white py-1 text-sm"
-        >
-          Add User
-        </button>
-      </div>
-      <div class="overflow-y-auto flex-1 border-t">
-        <ul id="userList" class="divide-y text-sm"></ul>
-      </div>
+  <body>
+    <h2>PeerJS Video Call Demo</h2>
+    <div>Your ID: <span id="my-id"></span></div>
+    <input id="friend-id" placeholder="Enter friend's ID" />
+    <button id="call-btn">Call</button>
+    <div>
+      <video id="local-video" autoplay muted></video>
+      <video id="remote-video" autoplay></video>
     </div>
 
-    <!-- Chat Section -->
-    <div class="flex-1 flex flex-col">
-      <div class="p-4 bg-white border-b flex items-center">
-        <div id="currentUser" class="font-bold text-gray-700">
-          No user selected
-        </div>
-      </div>
-
-      <!-- Chat area -->
-      <div
-        id="chatArea"
-        class="flex-1 overflow-y-auto p-4 space-y-2 bg-gray-50"
-      ></div>
-
-      <!-- Message input -->
-      <div class="p-4 border-t bg-white flex items-center">
-        <input
-          id="msgInput"
-          class="flex-1 border px-2 py-1 text-sm"
-          placeholder="Type a message"
-        />
-        <input id="fileInput" type="file" class="ml-2 hidden" />
-        <button
-          id="sendFileBtn"
-          class="ml-2 bg-yellow-400 text-sm px-2 py-1 rounded"
-        >
-          📎
-        </button>
-        <button
-          id="sendBtn"
-          class="ml-2 bg-green-500 text-white px-4 py-1 rounded"
-        >
-          Send
-        </button>
-      </div>
-
-      <!-- Video call buttons -->
-      <div class="p-4 border-t bg-white flex items-center gap-2">
-        <button
-          id="videoCallBtn"
-          class="bg-blue-500 text-white px-4 py-1 rounded"
-        >
-          Video Call 📹
-        </button>
-        <button
-          id="endCallBtn"
-          class="bg-red-500 text-white px-4 py-1 rounded hidden"
-        >
-          End Call ❌
-        </button>
-      </div>
-
-      <!-- Video area -->
-      <div id="videoContainer" class="p-4 flex gap-2 hidden">
-        <video
-          id="localVideo"
-          autoplay
-          muted
-          class="w-1/2 rounded border"
-        ></video>
-        <video id="remoteVideo" autoplay class="w-1/2 rounded border"></video>
-      </div>
-    </div>
-
-    <!-- Script -->
     <script>
-      let myId = localStorage.getItem("fixedPeerId");
-      if (!myId) {
-        myId = "user-" + Math.random().toString(36).substring(2, 9);
-        localStorage.setItem("fixedPeerId", myId);
-      }
-
+      const myId = "user-" + Math.random().toString(36).substring(2, 9);
       const peer = new Peer(myId);
-      const connections = {};
-      const messages = {};
-      let currentPeerId = null;
 
-      const myIdDiv = document.getElementById("my-id");
-      const showQRBtn = document.getElementById("showQRBtn");
-      const qrContainer = document.getElementById("qr-container");
-      const qrcodeCanvas = document.getElementById("qrcode");
+      const localVideo = document.getElementById("local-video");
+      const remoteVideo = document.getElementById("remote-video");
+      const friendIdInput = document.getElementById("friend-id");
+      const callBtn = document.getElementById("call-btn");
 
-      const peerIdInput = document.getElementById("peerIdInput");
-      const addUserBtn = document.getElementById("addUserBtn");
-      const userList = document.getElementById("userList");
+      document.getElementById("my-id").textContent = myId;
 
-      const chatArea = document.getElementById("chatArea");
-      const currentUser = document.getElementById("currentUser");
-      const msgInput = document.getElementById("msgInput");
-      const sendBtn = document.getElementById("sendBtn");
+      let localStream;
 
-      const sendFileBtn = document.getElementById("sendFileBtn");
-      const fileInput = document.getElementById("fileInput");
+      // Get video/audio stream
+      navigator.mediaDevices
+        .getUserMedia({ video: true, audio: true })
+        .then((stream) => {
+          localStream = stream;
+          localVideo.srcObject = stream;
+        })
+        .catch((err) => alert("Camera/Microphone error: " + err));
 
-      const videoCallBtn = document.getElementById("videoCallBtn");
-      const endCallBtn = document.getElementById("endCallBtn");
-      const localVideo = document.getElementById("localVideo");
-      const remoteVideo = document.getElementById("remoteVideo");
-      const videoContainer = document.getElementById("videoContainer");
-
-      let currentCall = null;
-
-      peer.on("open", (id) => {
-        myIdDiv.textContent = id;
-        QRCode.toCanvas(qrcodeCanvas, id);
-        loadStoredUsers();
-      });
-
-      showQRBtn.onclick = () => qrContainer.classList.toggle("hidden");
-
-      addUserBtn.onclick = () => {
-        const friendId = peerIdInput.value.trim();
-        if (!friendId) return;
-        saveUserToLocal(friendId);
-        addUserToList(friendId);
-        peerIdInput.value = "";
-      };
-
-      peer.on("connection", (conn) => {
-        if (!connections[conn.peer]) {
-          setupConnection(conn, conn.peer);
-        }
-      });
-
-      function setupConnection(conn, id) {
-        connections[id] = conn;
-        messages[id] = messages[id] || [];
-
-        conn.on("open", () => {
-          if (!document.querySelector(`[data-id='${id}']`)) {
-            saveUserToLocal(id);
-            addUserToList(id);
-          }
-          if (!currentPeerId) switchToUser(id);
-        });
-
-        conn.on("data", (data) => {
-          if (data.type === "msg") {
-            messages[id].push({ text: data.text, from: "them" });
-          } else if (data.type === "file") {
-            const url = URL.createObjectURL(data.blob);
-            messages[id].push({ file: url, name: data.name, from: "them" });
-          }
-          if (currentPeerId === id) renderMessages(id);
-        });
-
-        conn.on("close", () => {
-          alert(`${id} disconnected`);
-          document.querySelector(`[data-id='${id}']`)?.remove();
-          if (currentPeerId === id) {
-            currentUser.textContent = "No user selected";
-            chatArea.innerHTML = "";
-          }
-          delete connections[id];
-        });
-      }
-
-      function addUserToList(id) {
-        if (document.querySelector(`[data-id='${id}']`)) return;
-        const li = document.createElement("li");
-        li.className = "p-2 cursor-pointer hover:bg-gray-100";
-        li.textContent = id;
-        li.dataset.id = id;
-        li.onclick = () => {
-          if (connections[id]) {
-            switchToUser(id);
-          } else {
-            const conn = peer.connect(id);
-            setupConnection(conn, id);
-            conn.on("open", () => switchToUser(id));
-          }
-        };
-        userList.appendChild(li);
-      }
-
-      function switchToUser(id) {
-        currentPeerId = id;
-        currentUser.textContent = id;
-        renderMessages(id);
-      }
-
-      function renderMessages(id) {
-        chatArea.innerHTML = "";
-        messages[id].forEach((msg) => {
-          const div = document.createElement("div");
-          div.className = `max-w-xs px-3 py-2 rounded-lg text-sm ${
-            msg.from === "me" ? "ml-auto bg-green-200" : "mr-auto bg-gray-300"
-          }`;
-
-          if (msg.text) {
-            div.textContent = msg.text;
-          } else if (msg.file) {
-            div.innerHTML = `<a href="${msg.file}" download="${msg.name}" class="underline">${msg.name}</a>`;
-          }
-
-          chatArea.appendChild(div);
-        });
-        chatArea.scrollTop = chatArea.scrollHeight;
-      }
-
-      sendBtn.onclick = () => {
-        const text = msgInput.value.trim();
-        if (!text || !currentPeerId) return;
-        const conn = connections[currentPeerId];
-        conn.send({ type: "msg", text });
-        messages[currentPeerId].push({ text, from: "me" });
-        msgInput.value = "";
-        renderMessages(currentPeerId);
-      };
-
-      sendFileBtn.onclick = () => fileInput.click();
-
-      fileInput.onchange = () => {
-        const file = fileInput.files[0];
-        if (!file || !currentPeerId) return;
-        const conn = connections[currentPeerId];
-        conn.send({ type: "file", name: file.name, blob: file });
-        messages[currentPeerId].push({
-          file: URL.createObjectURL(file),
-          name: file.name,
-          from: "me",
-        });
-        renderMessages(currentPeerId);
-      };
-
-      function saveUserToLocal(id) {
-        let stored = JSON.parse(localStorage.getItem("peerUsers") || "[]");
-        if (!stored.includes(id)) {
-          stored.push(id);
-          localStorage.setItem("peerUsers", JSON.stringify(stored));
-        }
-      }
-
-      function loadStoredUsers() {
-        const stored = JSON.parse(localStorage.getItem("peerUsers") || "[]");
-        stored.forEach((id) => addUserToList(id));
-      }
-
-      // Video Call
-      videoCallBtn.onclick = async () => {
-        if (!currentPeerId) return alert("Select a user first.");
-        const stream = await navigator.mediaDevices.getUserMedia({
-          video: true,
-          audio: true,
-        });
-
-        localVideo.srcObject = stream;
-        videoContainer.classList.remove("hidden");
-
-        const call = peer.call(currentPeerId, stream);
-        currentCall = call;
-
+      // When another peer calls you
+      peer.on("call", (call) => {
+        call.answer(localStream);
         call.on("stream", (remoteStream) => {
           remoteVideo.srcObject = remoteStream;
         });
+      });
 
-        call.on("close", () => {
-          endVideoCall();
-        });
+      // Call button click
+      callBtn.onclick = () => {
+        const friendId = friendIdInput.value.trim();
+        if (!friendId || !localStream) return alert("Missing ID or stream");
 
-        endCallBtn.classList.remove("hidden");
-        videoCallBtn.classList.add("hidden");
-      };
-
-      peer.on("call", async (call) => {
-        const stream = await navigator.mediaDevices.getUserMedia({
-          video: true,
-          audio: true,
-        });
-
-        localVideo.srcObject = stream;
-        videoContainer.classList.remove("hidden");
-
-        call.answer(stream);
-        currentCall = call;
-
+        const call = peer.call(friendId, localStream);
         call.on("stream", (remoteStream) => {
           remoteVideo.srcObject = remoteStream;
         });
-
-        call.on("close", () => {
-          endVideoCall();
-        });
-
-        endCallBtn.classList.remove("hidden");
-        videoCallBtn.classList.add("hidden");
-      });
-
-      endCallBtn.onclick = () => {
-        if (currentCall) {
-          currentCall.close();
-          endVideoCall();
-        }
       };
-
-      function endVideoCall() {
-        if (localVideo.srcObject) {
-          localVideo.srcObject.getTracks().forEach((track) => track.stop());
-        }
-        if (remoteVideo.srcObject) {
-          remoteVideo.srcObject.getTracks().forEach((track) => track.stop());
-        }
-
-        localVideo.srcObject = null;
-        remoteVideo.srcObject = null;
-        videoContainer.classList.add("hidden");
-        endCallBtn.classList.add("hidden");
-        videoCallBtn.classList.remove("hidden");
-      }
     </script>
   </body>
 </html>
