@@ -1,80 +1,217 @@
 <!DOCTYPE html>
 <html>
   <head>
-    <title>Voice Call with PeerJS</title>
+    <title>PeerJS Voice Call App</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
     <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
     <style>
       body {
-        font-family: sans-serif;
+        margin: 0;
+        font-family: "Segoe UI", sans-serif;
+        background: #121212;
+        color: #fff;
+      }
+
+      .container {
         max-width: 400px;
         margin: auto;
-        padding: 20px;
-        background: #f0f0f0;
+        height: 100vh;
+        display: flex;
+        flex-direction: column;
       }
-      h2 {
+
+      header {
+        padding: 15px;
         text-align: center;
+        background: #1f1f1f;
+        font-size: 20px;
+        font-weight: bold;
       }
+
+      nav {
+        display: flex;
+        background: #1f1f1f;
+      }
+
+      nav button {
+        flex: 1;
+        padding: 12px;
+        background: #1f1f1f;
+        color: #aaa;
+        border: none;
+        font-size: 16px;
+        cursor: pointer;
+        transition: 0.2s;
+      }
+
+      nav button.active {
+        background: #272727;
+        color: #fff;
+      }
+
+      .section {
+        display: none;
+        padding: 15px;
+        flex: 1;
+        overflow-y: auto;
+      }
+
+      .section.active {
+        display: block;
+      }
+
       input,
       button {
         width: 100%;
-        padding: 10px;
-        margin: 5px 0;
+        padding: 12px;
+        margin: 10px 0;
+        font-size: 16px;
+        border: none;
+        border-radius: 8px;
       }
-      .call-controls,
-      .incoming-call {
-        display: none;
+
+      input {
+        background: #2c2c2c;
+        color: white;
+      }
+
+      button {
+        background: #03dac6;
+        color: black;
+        font-weight: bold;
+      }
+
+      .incoming-call,
+      .call-controls {
         margin-top: 15px;
       }
+
+      .saved-users div {
+        display: flex;
+        justify-content: space-between;
+        background: #2a2a2a;
+        margin: 5px 0;
+        padding: 10px;
+        border-radius: 6px;
+      }
+
+      .saved-users button {
+        margin-left: 5px;
+        background: #03dac6;
+        color: black;
+        border-radius: 5px;
+        font-size: 14px;
+        padding: 5px 8px;
+      }
+
       .status {
-        margin-top: 10px;
         text-align: center;
+        margin-top: 10px;
         font-weight: bold;
-        color: green;
+        color: #03dac6;
+      }
+
+      small {
+        display: block;
+        margin-bottom: 5px;
+        color: #aaa;
       }
     </style>
   </head>
   <body>
-    <h2>📞 PeerJS Voice Call</h2>
+    <div class="container">
+      <header>📞 Peer Voice Call</header>
 
-    <p><strong>Your ID:</strong> <span id="yourId">Loading...</span></p>
+      <nav>
+        <button class="tab active" onclick="switchTab('callTab')">Call</button>
+        <button class="tab" onclick="switchTab('contactsTab')">Contacts</button>
+        <button class="tab" onclick="switchTab('settingsTab')">Settings</button>
+      </nav>
 
-    <input type="text" id="peerIdInput" placeholder="Enter Peer ID to call" />
-    <button id="callBtn">Start Call</button>
+      <!-- 📞 CALL TAB -->
+      <div class="section active" id="callTab">
+        <small>Your ID</small>
+        <input type="text" id="yourId" readonly />
 
-    <div class="incoming-call" id="incomingCall">
-      <p><strong>Incoming call...</strong></p>
-      <button id="acceptBtn">Accept</button>
-      <button id="declineBtn">Decline</button>
+        <small>Enter Peer ID to call</small>
+        <input type="text" id="peerIdInput" placeholder="Peer ID" />
+        <button id="callBtn">Start Call</button>
+
+        <div class="incoming-call" id="incomingCall" style="display: none">
+          <p><strong>📞 Incoming call...</strong></p>
+          <button id="acceptBtn">Accept</button>
+          <button id="declineBtn">Decline</button>
+        </div>
+
+        <div class="call-controls" id="callControls" style="display: none">
+          <p>🟢 In Call with <span id="connectedWith"></span></p>
+          <button id="endCallBtn" style="background: #e74c3c; color: white">
+            End Call
+          </button>
+        </div>
+
+        <p class="status" id="status"></p>
+      </div>
+
+      <!-- 📇 CONTACTS TAB -->
+      <div class="section" id="contactsTab">
+        <input type="text" id="nameInput" placeholder="Name" />
+        <input type="text" id="saveIdInput" placeholder="Peer ID" />
+        <button id="saveBtn">Save Contact</button>
+
+        <div class="saved-users" id="savedUsers"></div>
+      </div>
+
+      <!-- ⚙️ SETTINGS TAB -->
+      <div class="section" id="settingsTab">
+        <p><strong>Your Persistent ID:</strong></p>
+        <code id="yourFixedId"></code>
+        <p>This ID stays the same even after refresh.</p>
+        <button onclick="generateNewId()" style="background: #ff9800">
+          🔄 Generate New ID
+        </button>
+      </div>
     </div>
-
-    <div class="call-controls" id="callControls">
-      <p><strong>In Call with:</strong> <span id="connectedWith"></span></p>
-      <button id="endCallBtn">End Call</button>
-    </div>
-
-    <p class="status" id="status"></p>
 
     <script>
-      const yourIdSpan = document.getElementById("yourId");
+      const tabs = document.querySelectorAll(".tab");
+      const sections = document.querySelectorAll(".section");
+
+      function switchTab(id) {
+        sections.forEach((sec) => sec.classList.remove("active"));
+        tabs.forEach((tab) => tab.classList.remove("active"));
+
+        document.getElementById(id).classList.add("active");
+        event.target.classList.add("active");
+      }
+
       const peerIdInput = document.getElementById("peerIdInput");
+      const yourIdInput = document.getElementById("yourId");
+      const yourFixedId = document.getElementById("yourFixedId");
       const callBtn = document.getElementById("callBtn");
-      const incomingCallDiv = document.getElementById("incomingCall");
       const acceptBtn = document.getElementById("acceptBtn");
       const declineBtn = document.getElementById("declineBtn");
+      const incomingCallDiv = document.getElementById("incomingCall");
       const callControls = document.getElementById("callControls");
       const endCallBtn = document.getElementById("endCallBtn");
       const connectedWithSpan = document.getElementById("connectedWith");
       const status = document.getElementById("status");
 
-      const peer = new Peer({
+      const nameInput = document.getElementById("nameInput");
+      const saveIdInput = document.getElementById("saveIdInput");
+      const saveBtn = document.getElementById("saveBtn");
+      const savedUsersDiv = document.getElementById("savedUsers");
+
+      let savedOwnId = localStorage.getItem("peer-id") || generateRandomId();
+      localStorage.setItem("peer-id", savedOwnId);
+      yourIdInput.value = savedOwnId;
+      yourFixedId.textContent = savedOwnId;
+
+      const peer = new Peer(savedOwnId, {
         config: { iceServers: [{ url: "stun:stun.l.google.com:19302" }] },
       });
 
       let currentCall = null;
-
-      peer.on("open", (id) => {
-        yourIdSpan.textContent = id;
-      });
 
       peer.on("call", (call) => {
         currentCall = call;
@@ -98,7 +235,7 @@
       });
 
       callBtn.onclick = () => {
-        const otherId = peerIdInput.value;
+        const otherId = peerIdInput.value.trim();
         if (!otherId) return alert("Enter a Peer ID!");
 
         navigator.mediaDevices.getUserMedia({ audio: true }).then((stream) => {
@@ -134,6 +271,63 @@
           currentCall = null;
         });
       }
+
+      function generateRandomId() {
+        return "user_" + Math.floor(Math.random() * 100000);
+      }
+
+      function generateNewId() {
+        if (!confirm("Generate a new ID? You may lose existing contacts."))
+          return;
+        localStorage.removeItem("peer-id");
+        location.reload();
+      }
+
+      saveBtn.onclick = () => {
+        const name = nameInput.value.trim();
+        const id = saveIdInput.value.trim();
+        if (!name || !id) return alert("Enter both name and ID.");
+        const users = JSON.parse(localStorage.getItem("savedUsers") || "{}");
+        users[name] = id;
+        localStorage.setItem("savedUsers", JSON.stringify(users));
+        nameInput.value = "";
+        saveIdInput.value = "";
+        loadSavedUsers();
+      };
+
+      function loadSavedUsers() {
+        const users = JSON.parse(localStorage.getItem("savedUsers") || "{}");
+        savedUsersDiv.innerHTML = "";
+        for (const name in users) {
+          const div = document.createElement("div");
+          div.innerHTML = `
+          <span>${name}</span>
+          <div>
+            <button onclick="callSaved('${users[name]}')">Call</button>
+            <button onclick="deleteUser('${name}')">❌</button>
+          </div>
+        `;
+          savedUsersDiv.appendChild(div);
+        }
+      }
+
+      function callSaved(id) {
+        peerIdInput.value = id;
+        switchTab("callTab");
+        callBtn.click();
+      }
+
+      function deleteUser(name) {
+        const users = JSON.parse(localStorage.getItem("savedUsers") || "{}");
+        delete users[name];
+        localStorage.setItem("savedUsers", JSON.stringify(users));
+        loadSavedUsers();
+      }
+
+      window.callSaved = callSaved;
+      window.deleteUser = deleteUser;
+
+      loadSavedUsers();
     </script>
   </body>
 </html>
