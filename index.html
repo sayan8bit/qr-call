@@ -3,7 +3,7 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Audio Call</title>
+    <title>Audio Call System</title>
     <style>
       body {
         font-family: Arial, sans-serif;
@@ -109,7 +109,13 @@
         localStorage.setItem("fixedID", myID);
       }
 
-      const peer = new Peer(myID);
+      const peer = new Peer(myID, {
+        debug: 2, // For logs
+        config: {
+          iceServers: [{ urls: "stun:stun.l.google.com:19302" }],
+        },
+      });
+
       const remoteAudio = document.getElementById("remote-audio");
       const myIdSpan = document.getElementById("my-id");
       const usersDiv = document.getElementById("users");
@@ -122,12 +128,19 @@
       let incomingCall = null;
 
       peer.on("open", (id) => {
+        console.log("Connected as:", id);
         myIdSpan.textContent = id;
         generateQR(id);
         loadUsers();
       });
 
+      peer.on("error", (err) => {
+        alert("PeerJS Error: " + err);
+        console.error(err);
+      });
+
       peer.on("call", (call) => {
+        console.log("Incoming call from", call.peer);
         incomingCall = call;
         callerSpan.textContent = call.peer;
         incomingDiv.style.display = "block";
@@ -152,14 +165,29 @@
       }
 
       function callUser(id) {
-        navigator.mediaDevices.getUserMedia({ audio: true }).then((stream) => {
-          savedStream = stream;
-          const call = peer.call(id, stream);
-          currentCall = call;
-          call.on("stream", (remoteStream) => {
-            remoteAudio.srcObject = remoteStream;
+        navigator.mediaDevices
+          .getUserMedia({ audio: true })
+          .then((stream) => {
+            savedStream = stream;
+            const call = peer.call(id, stream);
+            currentCall = call;
+            call.on("stream", (remoteStream) => {
+              remoteAudio.srcObject = remoteStream;
+            });
+
+            call.on("close", () => {
+              alert("Call ended");
+            });
+
+            call.on("error", (err) => {
+              alert("Call failed: " + err);
+              console.error(err);
+            });
+          })
+          .catch((err) => {
+            alert("Microphone permission denied");
+            console.error(err);
           });
-        });
       }
 
       function addUser() {
